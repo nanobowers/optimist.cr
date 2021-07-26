@@ -10,20 +10,23 @@ module Optimist
     @name : Symbol
     @default : DefaultType
     @permitted : PermittedType
+    @callback : Proc(String,String)?
+    @desc : String
     
-    def initialize
+    def initialize(name, desc, default)
       @long = LongNames.new
-
       # can be an Array of one-char strings, a one-char String, nil or :none
       @short = ShortNames.new
-      
+      @callback = nil
       @name = :__unknown
+      @desc = ""
       @multi_given = false
       @hidden = false
-      @default = nil
+      @default = default
       @permitted = nil
       @permitted_response = "option '%{arg}' only accepts %{valid_string}"
-#      @optshash = {} of String => String
+      @required = false
+
       @min_args = 1
       # note: maximum max_args is likely ~~ 128*1024, as
       # linux MAX_ARG_STRLEN is 128kiB
@@ -58,18 +61,18 @@ module Optimist
     # | 1        | >1        | formerly multi_arg?==true 
     # | ?        | ?         | presumably illegal condition. untested.
     
-    def array_default? ; self.default.kind_of?(Array) ; end
+    def array_default? ; self.default.is_a?(Array) ; end
 
     def doesnt_need_autogen_short ; !short.auto || !short.chars.empty? ; end
 
-    def callback ; opts(:callback) ; end
+    property :callback, :desc # def callback ; opts(:callback) ; end
     
-    def desc ; opts(:desc) ; end
+    #def desc ; opts(:desc) ; end
 
-    def required? ; opts(:required) ; end
+    def required? ; @required ; end
 
     def parse(_paramlist, _neg_given)
-      raise NotImplementedError, "parse must be overridden for newly registered type"
+      raise NotImplementedError.new("parse must be overridden for newly registered type")
     end
 
     # provide type-format string.  default to empty, but user should probably override it
@@ -86,7 +89,7 @@ module Optimist
     def full_description
       desc_str = desc
       desc_str = description_with_default desc_str if default
-      desc_str = description_with_permitted desc_str if permitted
+#TODO      desc_str = description_with_permitted desc_str if permitted
       desc_str
     end
 
@@ -103,25 +106,25 @@ module Optimist
     ## Format the educate-line description including the default-value(s)
     def description_with_default(str)
       return str unless default
-      default_s = case default
-                  when Array
-                    default.join(", ")
-                  else
-                    format_stdio(default).to_s
-                  end
+      #default_s = if default.is_a?(Array)
+      #              default.join(", ")
+      #            else
+      #              format_stdio(default).to_s
+      #            end
+      default_s = default.inspect
       return "#{str} (Default: #{default_s})"
     end
 
     ## Format the educate-line description including the permitted-value(s)
     def description_with_permitted(str)
       permitted_s = case permitted
-                    when Array
+                    in Array
                       permitted.map do |p|
                         format_stdio(p).to_s
                       end.join(", ")
-                    when Range
-                      permitted.to_a.map(&:to_s).join(", ")
-                    when Regexp
+                    in Range
+                      permitted.to_a.map(&.to_s).join(", ")
+                    in Regex
                       permitted.to_s
                     end
       return "#{str} (Permitted: #{permitted_s})"
@@ -129,11 +132,11 @@ module Optimist
 
     def permitted_valid_string
       case permitted
-      when Array
-        return "one of: " + permitted.to_a.map(&:to_s).join(", ")
-      when Range
+      in Array
+        return "one of: " + permitted.to_a.map(&.to_s).join(", ")
+      in Range
         return "value in range of: #{permitted}"
-      when Regexp
+      in Regex
         return "value matching: #{permitted.inspect}"
       end
       raise Exception, "invalid branch"
@@ -143,28 +146,32 @@ module Optimist
       return true if permitted.nil?
       return true if permitted.is_a? Array
       return true if permitted.is_a? Range
-      return true if permitted.is_a? Regexp
+      return true if permitted.is_a? Regex
       false
     end
 
-    def validate_permitted(arg, value)
+    def validate_permitted(arg : String, value : DefaultType) : Void
       return true if permitted.nil?
       unless permitted_value?(value)
         format_hash = {arg: arg, given: value, value: value, valid_string: permitted_valid_string(), permitted: permitted }
-        raise CommandlineError, permitted_response % format_hash
+        raise CommandlineError.new(permitted_response % format_hash)
       end
-      true
     end
     
     # incoming values from the command-line should be strings, so we should
     # stringify any permitted types as the basis of comparison.
-    def permitted_value?(val)
-      case permitted
-      when nil then true
-      when Regexp then val.match permitted
-      when Range then permitted.to_a.map(&:to_s).includes? val
-      when Array then permitted.map(&:to_s).includes? val
-      else false
+    def permitted_value?(val : DefaultType) : Bool
+      valstr = val.to_s
+      if @permitted.is_a?(Regex)
+        return @permitted =~ valstr
+      elsif permitted.is_a?(Array)
+        return permitted.map(&.to_s).includes? valstr
+      elsif permitted.is_a?(Range)
+        return permitted.to_a.map(&.to_s).includes? valstr
+      elsif permitted.nil?
+        return true
+      else
+        false
       end
     end  
     
@@ -176,8 +183,8 @@ module Optimist
     # to +Optimist::opt+.  This is trickier in Optimist, than other cmdline
     # parsers (e.g. Slop) because we allow the +default:+ to be able to
     # set the option's type.
-    def self.create(name, _desc,
-                    otype : Class = Optimist::BooleanOption,
+    def self.create(name, desc,
+                    cls : Class? = nil,
                     long : String? = nil,
                     alt : AlternatesType = nil,
                     short : (String|Bool|Nil) = nil,
@@ -185,15 +192,36 @@ module Optimist
                     default : DefaultType = nil,
                     permitted : PermittedType = nil,
                     permitted_response : String? = nil,
+                    required : Bool = false,
                     **opts)
-      p! opts
+
+      if cls.is_a?(Nil)
+        
+        if default.is_a?(Int)
+          cls = IntOption
+        elsif default.is_a?(Bool)
+          cls = BooleanOption
+        elsif default.is_a?(String)
+          cls = StringOption
+        elsif default.is_a?(Float)
+          cls = FloatOption
+        else #default.is_a?(Nil)
+          cls = BooleanOption
+          default = false
+        end
+        p! typeof(cls)
+        #opt_inst = cls.new(name, desc, default)
+        opt_inst = BooleanOption.new(name, desc, default)
+      else
+        opt_inst = cls.new(name, desc, default)
+      end
+
       #opttype = Optimist::Parser.registry_getopttype(otype)
       #opttype_from_default = get_klass_from_default(opts, opttype)
       #DEBUG# puts "\nopt:#{opttype||"nil"} ofd:#{opttype_from_default}"  if opttype_from_default
       #if opttype && opttype_from_default && !opttype.compatible_with?(opttype_from_default) # opttype.is_a? opttype_from_default.class
       #  raise ArgumentError, ":type specification (#{opttype.class}) and default type don't match (default type is #{opttype_from_default.class})" 
       #end
-      opt_inst = otype.new
       #opt_inst = (opttype || opttype_from_default || Optimist::BooleanOption.new)
 
       ## fill in :long
@@ -206,15 +234,12 @@ module Optimist
 
       opt_inst.multi_given = multi_given = multi
 
-      ## fill in :default for flags
-      defvalue = default || opt_inst.default
-
       ## autobox :default for :multi (multi-occurrence) arguments
       #defvalue = [defvalue] if defvalue && multi_given && !defvalue.kind_of?(Array)
       ## fill in permitted values
       opt_inst.permitted = permitted
       opt_inst.permitted_response = permitted_response if permitted_response
-      opt_inst.default = defvalue
+      #opt_inst.default = defvalue
       opt_inst.name = name
       #opt_inst.opts = opts
 
@@ -227,10 +252,10 @@ module Optimist
       if disambiguated_default.is_a? Array
         return(optdef.first.class.name.downcase + "s") if !optdef.empty?
         if opttype
-          raise ArgumentError, "multiple argument type must be plural" unless opttype.max_args > 1
+          raise ArgumentError.new("multiple argument type must be plural") unless opttype.max_args > 1
           return nil
         else
-          raise ArgumentError, "multiple argument type cannot be deduced from an empty array"
+          raise ArgumentError.new("multiple argument type cannot be deduced from an empty array")
         end
       end
       return disambiguated_default.class.name.downcase
@@ -261,7 +286,7 @@ module Optimist
       lopt = case lopt
              when /^--([^-].*)$/ then $1
              when /^[^-]/        then lopt
-             else                     raise ArgumentError, "invalid long option name #{lopt.inspect}"
+             else                     raise ArgumentError.new("invalid long option name #{lopt.inspect}")
              end
     end
 
@@ -270,11 +295,11 @@ module Optimist
       sopt = case sopt
              when /^-(.)$/          then $1
              when nil, :none, /^.$/ then sopt
-             else                   raise ArgumentError, "invalid short option name '#{sopt.inspect}'"
+             else                   raise ArgumentError.new("invalid short option name '#{sopt.inspect}'")
              end
 
       if sopt
-        raise ArgumentError, "a short option name can't be a number or a dash" if sopt =~ ::Optimist::Parser::INVALID_SHORT_ARG_REGEX
+        raise ArgumentError.new("a short option name can't be a number or a dash") if sopt =~ ::Optimist::Parser::INVALID_SHORT_ARG_REGEX
       end
       return sopt
     end
@@ -284,9 +309,9 @@ module Optimist
   # Flag option.  Has no arguments. Can be negated with "no-".
   class BooleanOption < Option
 
-    def initialize
-      super()
-      @default = false
+    def initialize(name, desc, default : Bool?)
+      super
+      @default = default.nil? ? false : default
       @min_args = 0
       @max_args = 0
     end
@@ -298,12 +323,18 @@ module Optimist
 
   # Floating point number option class.
   class FloatOption < Option
-
+    def initialize(name, desc, default : Float64?)
+      super
+      @default = default
+    end
+    
     def type_format ; "=<f>" ; end
     def parse(paramlist, _neg_given)
       paramlist.map do |pg|
         pg.map do |param|
-          raise CommandlineError, "option '#{self.name}' needs a floating-point number" unless param.is_a?(Numeric) || param =~ FLOAT_RE
+          unless param =~ FLOAT_RE
+            raise CommandlineError.new("option '#{self.name}' needs a floating-point number")
+          end
           param.to_f
         end
       end
@@ -311,13 +342,20 @@ module Optimist
   end
 
   # Integer number option class.
-  class IntegerOption < Option
-
+  class IntOption < Option
+    
+    def initialize(name, desc, default : Int32?)
+      super
+      @default = default
+    end
+    
     def type_format ; "=<i>" ; end
     def parse(paramlist, _neg_given)
       paramlist.map do |pg|
         pg.map do |param|
-          raise CommandlineError, "option '#{self.name}' needs an integer" unless param.is_a?(Numeric) || param =~ /^-?[\d_]+$/
+          unless param =~ /^-?[\d_]+$/
+            raise CommandlineError.new("option '#{self.name}' needs an integer")
+          end
           param.to_i
         end
       end
@@ -354,7 +392,7 @@ module Optimist
 
     def type_format ; "=<s>" ; end
     def parse(paramlist, _neg_given)
-      paramlist.map { |pg| pg.map(&:to_s) }
+      paramlist.map { |pg| pg.map(&.to_s) }
     end
   end
 
@@ -375,9 +413,9 @@ module Optimist
       end
     end
 
-    def initialize
+    def initialize(name, desc, default : Bool?)
       super
-      @default = false
+      @default = default.nil? ? false : default
       @min_args = 0
       @max_args = 1
     end
@@ -391,9 +429,6 @@ module Optimist
 
   end
 
-  # Option for dates.  No longer uses Chronic if available.
-  # If chronic style dates are needed, then you may
-  # require 'optimist_xl/chronic'
 
   class DateOption < Option
 
@@ -401,11 +436,12 @@ module Optimist
     def parse(paramlist, _neg_given)
       paramlist.map do |pg|
         pg.map do |param|
-          next param if param.is_a?(Date)
-          begin
-            Date.parse(param)
-          rescue ArgumentError
-            raise CommandlineError, "option '#{self.name}' needs a date"
+          if param.is_a?(Time)
+            param
+          elsif param.is_a?(String)
+            Time.parse!(param, "%Y-%m-%d")
+          else
+            raise CommandlineError.new("option '#{self.name}' needs a date")
           end
         end
       end
@@ -418,33 +454,33 @@ module Optimist
   ## the +:type+ parameter of #opt.
 
   # Option class for handling multiple Integers
-  class IntegerArrayOption < IntegerOption
+  class IntArrayOption < IntOption
     def type_format ; "=<i+>" ; end
-    def initialize ; super ; @max_args = 999 ; end
+    #def initialize ; super ; @max_args = 999 ; end
   end
 
   # Option class for handling multiple Floats
   class FloatArrayOption < FloatOption
     def type_format ; "=<f+>" ; end
-    def initialize ; super ; @max_args = 999 ; end
+    #def initialize ; super ; @max_args = 999 ; end
   end
 
   # Option class for handling multiple Strings
   class StringArrayOption < StringOption
     def type_format ; "=<s+>" ; end
-    def initialize ; super ; @max_args = 999 ; end
+    #def initialize ; super ; @max_args = 999 ; end
   end
 
   # Option class for handling multiple dates
   class DateArrayOption < DateOption
     def type_format ; "=<date+>" ; end
-    def initialize ; super ; @max_args = 999 ; end
+    #def initialize ; super ; @max_args = 999 ; end
   end
 
   # Option class for handling Files/URLs via 'open'
   class IOArrayOption < IOOption
     def type_format ; "=<filename/uri+>" ; end
-    def initialize ; super ; @max_args = 999 ; end
+    #def initialize(name ; super ; @max_args = 999 ; end
   end
 
 end

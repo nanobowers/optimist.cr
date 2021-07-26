@@ -86,12 +86,12 @@ end
 ##
 ## Requires passing in the parser object.
 
-def self.with_standard_exception_handling(parser)
+def self.with_standard_exception_handling(parser : Parser)
   yield
 rescue ex : CommandlineError
   parser.die(ex.message, nil, ex.error_code)
 rescue ex : HelpNeeded
-  e.parser.educate
+  ex.parser.educate
   exit
 rescue VersionNeeded
   puts parser.version

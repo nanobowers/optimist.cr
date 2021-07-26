@@ -1,7 +1,7 @@
 module Optimist
 
-  alias DefaultType = (String|Nil|Float64|Bool|Int32)
-  alias PermittedType = (String|Regex|Nil)
-  alias AlternatesType = (Array(String) | String | Nil)
+  alias DefaultType = ( String | Nil | Float64 | Bool | Int32 | Array(String) )
+  alias PermittedType = ( Array(String|Int32) | Regex | Range(Int32,Int32) | Nil )
+  alias AlternatesType = ( Array(String) | String | Nil )
 
 end

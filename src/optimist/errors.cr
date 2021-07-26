@@ -15,10 +15,11 @@ module Optimist
   ## automatically by Optimist#options.
   class HelpNeeded < Exception
     getter :parser
-    def initialize(msg=nil, parser : Parser? = nil)
-      super(msg)
+    def initialize(parser : Parser)
+      super("")
       @parser = parser
     end
+    
   end
 
   ## Thrown by Parser if the user passes in '-v' or '--version'. Handled
