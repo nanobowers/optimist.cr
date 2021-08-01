@@ -9,12 +9,12 @@ module Optimist
   ## argument-parsing logic), call #parse to actually produce the output hash,
   ## and consider calling it from within
   ## Optimist::with_standard_exception_handling.
-  
+
   abstract class Constraint
     @syms : Array(Symbol)
     getter :syms
     def initialize(*syms)
-      @syms = syms
+      @syms = syms.to_a
     end
   end
   class DependConstraint < Constraint ; end
@@ -28,7 +28,7 @@ module Optimist
     def initialize(@original_arg : String)
       @arg = @original_arg
       @negative_given = false
-      @params = [] of Array(String)
+      @params = [] of Array(DefaultType)
     end
 
     def handle_no_forms!
@@ -54,7 +54,7 @@ module Optimist
     ## the parser is passed one or more options that were not
     ## registered ahead of time.  If 'true', then the parser will simply
     ## ignore options that it does not recognize.
-    property :ignore_invalid_opts
+    property :ignore_invalid_options
 
     @synopsis : String?
     @usage : String?
@@ -65,9 +65,9 @@ module Optimist
     getter :width
     ## Initializes the parser, and instance-evaluates any block given.
     def initialize( exact_match : Bool = false,
-                    explicit_short_opts : Bool = false,
+                    explicit_short_options : Bool = false,
                     suggestions : Bool = true,
-                    @ignore_invalid_opts : Bool = false,
+                    @ignore_invalid_options : Bool = false,
                   )
       @version = nil
       @leftovers = [] of String
@@ -87,7 +87,7 @@ module Optimist
       
       # parser "settings"
       @exact_match = exact_match
-      @explicit_short_opts = explicit_short_opts
+      @explicit_short_options = explicit_short_options
       @suggestions = suggestions
       
       #NOTE# yield now happens externally..
@@ -155,7 +155,7 @@ module Optimist
       raise ArgumentError.new("permitted values for option #{o.long.long.inspect} must be either nil, Range, Regex or an Array;") unless o.permitted_type_valid?
 
       o.short.chars.each do |short|
-        raise ArgumentError.new("short option name #{short.inspect} is already taken; please specify a (different) :short") if @short[short]
+        raise ArgumentError.new("short option name #{short.inspect} is already taken; please specify a (different) :short") if @short.has_key?(short)
         @short[short] = o.name
       end
 
@@ -181,7 +181,7 @@ module Optimist
 
     ## Adds a synopsis (command summary description) right below the
     ## usage line, or as the first line if usage isn't specified.
-    property :synopsys
+    property :synopsis
 
     ## Adds text to the help display. Can be interspersed with calls to
     ## #opt to build a multi-section help page.
@@ -196,13 +196,13 @@ module Optimist
     ## better modeled with Optimist::die.
     def depends(*syms)
       syms.each { |sym| raise ArgumentError.new("unknown option '#{sym}'") unless @specs[sym] }
-      @constraints << DependConstraint.new(syms)
+      @constraints << DependConstraint.new(*syms)
     end
 
     ## Marks two (or more!) options as conflicting.
     def conflicts(*syms)
       syms.each { |sym| raise ArgumentError.new("unknown option '#{sym}'") unless @specs[sym] }
-      @constraints << ConflictConstraint.new(syms)
+      @constraints << ConflictConstraint.new(*syms)
     end
 
     ## Defines a set of words which cause parsing to terminate when
@@ -215,7 +215,7 @@ module Optimist
     ## invocation would then be used to parse subcommand options, after
     ## shifting the subcommand off of ARGV.
     def stop_on(*words)
-      @stop_words = words.flatten
+      @stop_words = words.to_a.flatten
     end
 
     ## Similar to #stop_on, but stops on any unknown word when encountered
@@ -251,32 +251,33 @@ module Optimist
       if self.responds_to?(:subcommand_name)
         errstring += " for command '#{self.subcommand_name}'"
       end
-      if suggestions
-        input = arg.sub(/^[-]*/,"")
-
-        # Code borrowed from did_you_mean gem (was JaroWinkler here)
-        jw_threshold = 0.75
-        seed = candidates.select {|candidate| JaroWinkler.distance(candidate, input) >= jw_threshold } \
-               .sort_by! {|candidate| JaroWinkler.distance(candidate.to_s, input) } \
-               .reverse!
-        # Correct mistypes
-        threshold   = (input.length * 0.25).ceil
-        has_mistype = seed.rindex {|c| Levenshtein.distance(c, input) <= threshold }
-        corrections = if has_mistype
-                        seed.take(has_mistype + 1)
-                      else
-                        # Correct misspells
-                        seed.select do |candidate|
-                          length    = input.length < candidate.length ? input.length : candidate.length
-
-                          Levenshtein.distance(candidate, input) < length
-                        end.first(1)
-                      end
-        unless corrections.empty?
-          dashdash_corrections = corrections.map{|s| "--#{s}" }
-          errstring << ".  Did you mean: [#{dashdash_corrections.join(", ")}] ?"
-        end
-      end
+      ## TODO ##
+#      if suggestions
+#        input = arg.sub(/^[-]*/,"")
+#
+#        # Code borrowed from did_you_mean gem (was JaroWinkler here)
+#        jw_threshold = 0.75
+#        seed = candidates.select {|candidate| JaroWinkler.distance(candidate, input) >= jw_threshold } \
+#               .sort_by! {|candidate| JaroWinkler.distance(candidate.to_s, input) } \
+#               .reverse!
+#        # Correct mistypes
+#        threshold   = (input.length * 0.25).ceil
+#        has_mistype = seed.rindex {|c| Levenshtein.distance(c, input) <= threshold }
+#        corrections = if has_mistype
+#                        seed.take(has_mistype + 1)
+#                      else
+#                        # Correct misspells
+#                        seed.select do |candidate|
+#                          length    = input.length < candidate.length ? input.length : candidate.length
+#
+#                          Levenshtein.distance(candidate, input) < length
+#                        end.first(1)
+#                      end
+#        unless corrections.empty?
+#          dashdash_corrections = corrections.map{|s| "--#{s}" }
+#          errstring << ".  Did you mean: [#{dashdash_corrections.join(", ")}] ?"
+#        end
+#      end
       raise CommandlineError.new(errstring)
     end
 
@@ -312,9 +313,10 @@ module Optimist
 #                             leftovers: subcmd_parser.leftovers)
 #      end
     end
-    
+
+
     def parse_base(cmdline = ARGV)
-      vals = {} of Symbol? => Array(DefaultType)
+      vals = {} of (Symbol|Nil) => Array(DefaultType)
       required = {} of Symbol => Bool
 
       # create default version/help options if not already defined
@@ -327,24 +329,28 @@ module Optimist
         vals[sym] = [] of DefaultType  if opts.multi && !opts.default # multi arguments default to [], not nil
       end
 
-      resolve_default_short_options! unless @explicit_short_opts
+      resolve_default_short_options! unless @explicit_short_options
 
       # going to set given_args in a loop
       given_args = {} of (Symbol|Nil) => GivenArg
       ## resolve symbols
-      @leftovers = each_arg cmdline do |original_arg, params|
+      @leftovers = each_arg cmdline do |original_arg, strparams|
+        #params = strparams.as(Array(DefaultType))
+        params = strparams.map { |x| x.as(DefaultType) }
 
         givenarg = GivenArg.new(original_arg)
         
         givenarg.handle_no_forms!
 
         sym = case givenarg.arg
-              when /^-([^-])$/      then @short[$1]
-              when /^--([^-]\S*)$/  then @long[$1] || @long["no-#{$1}"]
+              when /^-([^-])$/      then @short[$1]?
+              when /^--([^-]\S*)$/  then @long[$1]? || @long["no-#{$1}"]?
               else
                 raise CommandlineError.new("invalid argument syntax: '#{givenarg.arg}'")
               end
 
+        p! [original_arg, params, sym]
+        
         if givenarg.arg.is_a?(Bool)
           raise Exception.new("arg cannot be bool") #TODO#
         elsif givenarg.arg =~ /--no-/
@@ -355,10 +361,11 @@ module Optimist
           # support inexact matching of long-arguments like perl's Getopt::Long
           sym = perform_inexact_match(givenarg.arg, $1)
         end
+
+        next nil if ignore_invalid_options && sym.nil?
+
         
-        next nil if ignore_invalid_opts && !sym
-        
-        #TEMPORARY_REMOVE# handle_unknown_argument(givenarg.arg, @long.keys, @suggestions) unless sym
+        handle_unknown_argument(givenarg.arg, @long.keys, @suggestions) unless sym
 
         if given_args.includes?(sym) && !@specs[sym].multi
           raise CommandlineError.new("option '#{givenarg.arg}' specified multiple times")
@@ -383,21 +390,22 @@ module Optimist
         #old#  end
         #old#end
 
-#        if params.size == 0
-#          if @specs[sym].min_args == 0
-#            given_args[sym][:params] << [ @specs[sym].default || true]
-#          end
-#        elsif params.size > 0
-#          if params.size >= @specs[sym].max_args
-#            # take smaller of the two sizes to determine how many parameters to take
-#            num_params_taken = [params.size, @specs[sym].max_args].min
-#            given_args[sym][:params] << params[0, num_params_taken]
-#          else
-#            # take all the parameters
-#            given_args[sym][:params] << params        
-#            num_params_taken = params.size
-#          end
-#        end
+        if params.size == 0
+          if @specs[sym].min_args == 0
+            defval = (@specs[sym].default == false) ? true : @specs[sym].default
+            given_args[sym].params << [ defval ]
+          end
+        elsif params.size > 0
+          if params.size >= @specs[sym].max_args
+            # take smaller of the two sizes to determine how many parameters to take
+            num_params_taken = [params.size, @specs[sym].max_args].min
+            given_args[sym].params << params[0..num_params_taken]
+          else
+            # take all the parameters
+            given_args[sym].params << params
+            num_params_taken = params.size
+          end
+        end
         
         num_params_taken
       end
@@ -415,9 +423,9 @@ module Optimist
         
         case constraint
             in DependConstraint
-            constraint.syms.each { |sym| raise CommandlineError.new("--#{@specs[constraint_sym].long} requires --#{@specs[sym].long}") unless given_args.includes? sym }
+            constraint.syms.each { |sym| raise CommandlineError.new("--#{@specs[constraint_sym].long.long} requires --#{@specs[sym].long.long}") unless given_args.includes? sym }
             in ConflictConstraint
-            constraint.syms.each { |sym| raise CommandlineError.new("--#{@specs[constraint_sym].long} conflicts with --#{@specs[sym].long}") if given_args.includes?(sym) && (sym != constraint_sym) }
+            constraint.syms.each { |sym| raise CommandlineError.new("--#{@specs[constraint_sym].long.long} conflicts with --#{@specs[sym].long.long}") if given_args.includes?(sym) && (sym != constraint_sym) }
             in Constraint
             raise "wtf abstract case"
         end
@@ -432,15 +440,16 @@ module Optimist
         #arg, params, negative_given = given_data.values_at :arg, :params, :negative_given
 
         opts = @specs[sym]
-
+        pp! [givenarg, opts]
         if givenarg.params.size < opts.min_args
           unless opts.default
             raise CommandlineError.new("option '#{givenarg.arg}' needs a parameter")
           end
           if opts.array_default?
-            givenarg.params << [opts.default.clone.to_s]
+            raise Exception.new("badness")
+            #TODO# givenarg.params << [opts.default.clone.to_s]
           else
-            givenarg.params << [opts.default.to_s]
+            #TODO# givenarg.params << [opts.default.to_s]
           end
         end
 
@@ -451,7 +460,7 @@ module Optimist
         #  end
         #end
 
-        #vals["#{sym}_given".intern] = true # mark argument as specified on the commandline
+        #TODO: vals["#{sym}_given"] = true # mark argument as specified on the commandline
 
 #        vals[sym] = opts.parse(givenarg.params, givenarg.negative_given)
 #

@@ -15,7 +15,7 @@ module Optimist
     
     def initialize(name, desc, default)
       @long = LongNames.new
-      # can be an Array of one-char strings, a one-char String, nil or :none
+      # can be an Array of one-char strings, a one-char String, nil or false
       @short = ShortNames.new
       @callback = nil
       @name = :__unknown
@@ -187,7 +187,7 @@ module Optimist
                     cls : Class? = nil,
                     long : String? = nil,
                     alt : AlternatesType = nil,
-                    short : (String|Bool|Nil) = nil,
+                    short : (String|Bool|Nil|Char) = nil,
                     multi : Bool = false,
                     default : DefaultType = nil,
                     permitted : PermittedType = nil,
@@ -196,26 +196,28 @@ module Optimist
                     **opts)
 
       if cls.is_a?(Nil)
-        
         if default.is_a?(Int)
-          cls = IntOption
+          opt_inst = IntOption.new(name, desc, default)
         elsif default.is_a?(Bool)
-          cls = BooleanOption
+          opt_inst = BooleanOption.new(name, desc, default)
         elsif default.is_a?(String)
-          cls = StringOption
+          opt_inst = StringOption.new(name, desc, default)
+        elsif default.is_a?(Array(String))
+          opt_inst = StringArrayOption.new(name, desc, default)
         elsif default.is_a?(Float)
-          cls = FloatOption
-        else #default.is_a?(Nil)
-          cls = BooleanOption
+          opt_inst = FloatOption.new(name, desc, default)
+        elsif default.is_a?(IO::FileDescriptor)
+          opt_inst = IOOption.new(name, desc, default)
+        else # nil??
+          opt_inst = BooleanOption.new(name, desc, default)
           default = false
         end
-        p! typeof(cls)
-        #opt_inst = cls.new(name, desc, default)
-        opt_inst = BooleanOption.new(name, desc, default)
       else
         opt_inst = cls.new(name, desc, default)
       end
-
+      
+      # p! opt_inst
+      
       #opttype = Optimist::Parser.registry_getopttype(otype)
       #opttype_from_default = get_klass_from_default(opts, opttype)
       #DEBUG# puts "\nopt:#{opttype||"nil"} ofd:#{opttype_from_default}"  if opttype_from_default
@@ -291,10 +293,10 @@ module Optimist
     end
 
     def self.handle_short_opt(sopt)
-      sopt = sopt.to_s if sopt && sopt != :none
+      sopt = sopt.to_s if sopt && sopt != false
       sopt = case sopt
              when /^-(.)$/          then $1
-             when nil, :none, /^.$/ then sopt
+             when nil, false, /^.$/ then sopt
              else                   raise ArgumentError.new("invalid short option name '#{sopt.inspect}'")
              end
 
