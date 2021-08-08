@@ -10,11 +10,15 @@ module Optimist
   ## and consider calling it from within
   ## Optimist::with_standard_exception_handling.
 
+  record OrderedOpt, str : String
+  record OrderedText, str : String
+  alias OrderedType = (OrderedOpt | OrderedText)
+  
   abstract class Constraint
-    @syms : Array(Symbol)
-    getter :syms
+    @idents : Array(Ident)
+    getter :idents
     def initialize(*syms)
-      @syms = syms.to_a
+      @idents = idents.to_a
     end
   end
   class DependConstraint < Constraint ; end
@@ -28,7 +32,7 @@ module Optimist
     def initialize(@original_arg : String)
       @arg = @original_arg
       @negative_given = false
-      @params = [] of Array(DefaultType)
+      @params = [] of String # DefaultType
     end
 
     def handle_no_forms!
@@ -59,7 +63,6 @@ module Optimist
     @synopsis : String?
     @usage : String?
     @version : String?
-    #@settings : NamedTuple(Symbol, Bool)
 
     @width : Int32
     getter :width
@@ -71,10 +74,10 @@ module Optimist
                   )
       @version = nil
       @leftovers = [] of String
-      @specs = {} of Symbol => Option
-      @long = {} of String => Symbol
-      @short = {} of String => Symbol
-      @order = [] of Array(Symbol)
+      @specs = {} of String => Option
+      @long = {} of String => Ident
+      @short = {} of String => Ident
+      @order = [] of OrderedType
       @constraints = [] of (DependConstraint | ConflictConstraint)
       @stop_words = [] of String
       @stop_on_unknown = false
@@ -144,7 +147,7 @@ module Optimist
       #opts[:callback] = b
       #opts[:desc] = desc
 
-      o = Option.create(name, desc, **opts)
+      o = Option.create(name.to_s, desc, **opts)
 
       raise ArgumentError.new("you already have an argument named '#{name}'") if @specs.includes? o.name
       o.long.names.each do |lng|
@@ -160,7 +163,7 @@ module Optimist
       end
 
       @specs[o.name] = o
-      @order << [:opt, o.name]
+      @order << OrderedOpt.new(o.name.to_s)
     end
 
     def subcmd(name, desc=nil, **args, &b)
@@ -186,10 +189,8 @@ module Optimist
     ## Adds text to the help display. Can be interspersed with calls to
     ## #opt to build a multi-section help page.
     def banner(s)
-      @order << [:text, s]
+      @order << OrderedText.new(s)
     end
-
-    #DEAD# alias_method :text, :banner
 
     ## Marks two (or more!) options as requiring each other. Only handles
     ## undirected (i.e., mutual) dependencies. Directed dependencies are
@@ -237,6 +238,7 @@ module Optimist
     ## If only one partially matches, then we can safely use that.
     ## Otherwise, we raise an error that the partially given option was ambiguous.
     private def perform_inexact_match(arg, partial_match)  # :nodoc:
+      # full match case
       return @long[partial_match] if @long.has_key?(partial_match)
       partially_matched_keys = @long.keys.select { |x| x.starts_with?(partial_match) }
       return case partially_matched_keys.size
@@ -248,9 +250,11 @@ module Optimist
 
     private def handle_unknown_argument(arg, candidates, suggestions)
       errstring = "unknown argument '#{arg}'"
-      if self.responds_to?(:subcommand_name)
-        errstring += " for command '#{self.subcommand_name}'"
-      end
+      
+      #SUBC#      if self.responds_to?(:subcommand_name)
+      #SUBC#        errstring += " for command '#{self.subcommand_name}'"
+      #SUBC#      end
+      
       ## TODO ##
 #      if suggestions
 #        input = arg.sub(/^[-]*/,"")
@@ -316,64 +320,71 @@ module Optimist
 
 
     def parse_base(cmdline = ARGV)
-      vals = {} of (Symbol|Nil) => Array(DefaultType)
-      required = {} of Symbol => Bool
+      vals = {} of Ident? => Array(DefaultType)
+      required = {} of Ident => Bool
 
       # create default version/help options if not already defined
       opt :version, "Print version and exit" if @version && ! (@specs.has_key?(:version) || @long.has_key?("version"))
       opt :help, "Show this message" unless @specs.has_key?(:help) || @long.has_key?("help")
 
-      @specs.each do |sym, opts|
-        required[sym] = true if opts.required?
-        vals[sym] = [opts.default]
-        vals[sym] = [] of DefaultType  if opts.multi && !opts.default # multi arguments default to [], not nil
+      @specs.each do |ident, opts|
+        required[ident] = true if opts.required?
+        vals[ident] = [ opts.default ] # may need to do this if we dont fully specify all types:  .as(DefaultType)
+        vals[ident] = [] of DefaultType  if opts.multi && !opts.default # multi arguments default to [], not nil
       end
 
       resolve_default_short_options! unless @explicit_short_options
 
       # going to set given_args in a loop
-      given_args = {} of (Symbol|Nil) => GivenArg
-      ## resolve symbols
+      given_args = {} of Ident? => GivenArg
+
       @leftovers = each_arg cmdline do |original_arg, strparams|
-        #params = strparams.as(Array(DefaultType))
-        params = strparams.map { |x| x.as(DefaultType) }
+
+        # The each_arg will return an original_arg string and any parameters
+        # that follow it, up to either the next thing that looks like an
+        # option or the termination string '--'.
+        # Now we need to decide if these extra parameters should actually be
+        # associated with the option, or if we need to add them on to the
+        # leftovers list
+       
+        #doesnt work# params = strparams.as(Array(DefaultType))
+        params = strparams # .map { |x| x.as(DefaultType) } # recast
 
         givenarg = GivenArg.new(original_arg)
-        
         givenarg.handle_no_forms!
 
-        sym = case givenarg.arg
+        ident = case givenarg.arg
               when /^-([^-])$/      then @short[$1]?
               when /^--([^-]\S*)$/  then @long[$1]? || @long["no-#{$1}"]?
               else
                 raise CommandlineError.new("invalid argument syntax: '#{givenarg.arg}'")
               end
 
-        p! [original_arg, params, sym]
+        p! [original_arg, params, ident]
         
         if givenarg.arg.is_a?(Bool)
           raise Exception.new("arg cannot be bool") #TODO#
         elsif givenarg.arg =~ /--no-/
           # explicitly invalidate --no-no- arguments
-          sym = nil 
-        elsif !sym && !@exact_match && givenarg.arg.match(/^--(\S*)$/)
-          # If sym is not already found in the short/long lookup then 
+          ident = nil 
+        elsif !ident && !@exact_match && givenarg.arg.match(/^--(\S*)$/)
+          # If ident is not already found in the short/long lookup then 
           # support inexact matching of long-arguments like perl's Getopt::Long
-          sym = perform_inexact_match(givenarg.arg, $1)
+          ident = perform_inexact_match(givenarg.arg, $1)
         end
 
-        next nil if ignore_invalid_options && sym.nil?
+        next nil if ignore_invalid_options && ident.nil?
 
         
-        handle_unknown_argument(givenarg.arg, @long.keys, @suggestions) unless sym
+        handle_unknown_argument(givenarg.arg, @long.keys, @suggestions) unless ident
 
-        if given_args.includes?(sym) && !@specs[sym].multi
-          raise CommandlineError.new("option '#{givenarg.arg}' specified multiple times")
+        if given_args.includes?(ident) && !@specs[ident].multi
+          raise CommandlineError.new("Option '#{givenarg.arg}' specified multiple times")
         end
 
 
-        #given_args[sym] ||= {} of Symbol => Bool
-        given_args[sym] = givenarg
+        #given_args[ident] ||= {} of Symbol => Bool
+        given_args[ident] = givenarg
 
         # The block returns the number of parameters taken.
         num_params_taken = 0
@@ -381,32 +392,31 @@ module Optimist
         #DEBUG# puts "\nparams:#{params} npt:#{num_params_taken},ps:#{params.size}"
 
         #old#if params.size > 0
-        #old#  if @specs[sym].min_args == 1 && @specs[sym].max_args == 1
-        #old#    given_args[sym][:params] << params[0, 1]  # take the first parameter
+        #old#  if @specs[ident].min_args == 1 && @specs[ident].max_args == 1
+        #old#    given_args[ident][:params] << params[0, 1]  # take the first parameter
         #old#    num_params_taken = 1
-        #old#  elsif @specs[sym].max_args > 1
-        #old#    given_args[sym][:params] << params        # take all the parameters
+        #old#  elsif @specs[ident].max_args > 1
+        #old#    given_args[ident][:params] << params        # take all the parameters
         #old#    num_params_taken = params.size
         #old#  end
         #old#end
 
         if params.size == 0
-          if @specs[sym].min_args == 0
-            defval = (@specs[sym].default == false) ? true : @specs[sym].default
-            given_args[sym].params << [ defval ]
+          if @specs[ident].min_args == 0
+            #defval = (@specs[ident].default == false) ? true : @specs[ident].default
+            #given_args[ident].params << defval
           end
         elsif params.size > 0
-          if params.size >= @specs[sym].max_args
+          if params.size >= @specs[ident].max_args
             # take smaller of the two sizes to determine how many parameters to take
-            num_params_taken = [params.size, @specs[sym].max_args].min
-            given_args[sym].params << params[0..num_params_taken]
+            num_params_taken = [params.size, @specs[ident].max_args].min
+            given_args[ident].params.concat params[0..num_params_taken]
           else
             # take all the parameters
-            given_args[sym].params << params
+            given_args[ident].params.concat params
             num_params_taken = params.size
           end
         end
-        
         num_params_taken
       end
 
@@ -418,71 +428,82 @@ module Optimist
 
       ## check constraint satisfaction
       @constraints.each do |constraint|
-        constraint_sym = constraint.syms.find { |sym| given_args[sym] }
-        next unless constraint_sym
+        constraint_ident = constraint.idents.find { |ident| given_args[ident] }
+        next unless constraint_ident
         
         case constraint
             in DependConstraint
-            constraint.syms.each { |sym| raise CommandlineError.new("--#{@specs[constraint_sym].long.long} requires --#{@specs[sym].long.long}") unless given_args.includes? sym }
+            constraint.idents.each { |ident| raise CommandlineError.new("--#{@specs[constraint_ident].long.long} requires --#{@specs[ident].long.long}") unless given_args.includes? ident }
             in ConflictConstraint
-            constraint.syms.each { |sym| raise CommandlineError.new("--#{@specs[constraint_sym].long.long} conflicts with --#{@specs[sym].long.long}") if given_args.includes?(sym) && (sym != constraint_sym) }
+            constraint.idents.each { |ident| raise CommandlineError.new("--#{@specs[constraint_ident].long.long} conflicts with --#{@specs[ident].long.long}") if given_args.includes?(ident) && (ident != constraint_ident) }
             in Constraint
             raise "wtf abstract case"
         end
       end
 
-      required.each do |sym, _val|
-        raise CommandlineError.new("option --#{@specs[sym].long} must be specified") unless given_args.includes? sym
+      ## Fail if option is required but not given
+      @specs.each do |ident, opts|
+        if opts.required? && !given_args.includes?(ident)
+          raise CommandlineError.new("option --#{@specs[ident].long} must be specified")
+        end
       end
 
       ## parse parameters
-      given_args.each do |sym, givenarg|
+      given_args.each do |ident, givenarg|
         #arg, params, negative_given = given_data.values_at :arg, :params, :negative_given
 
-        opts = @specs[sym]
+        opts = @specs[ident]
+
+        
+        #givenarg.params.each do |param|
+        #  opts.add_argument_value(param)
+        #end
+
+        
         pp! [givenarg, opts]
         if givenarg.params.size < opts.min_args
           unless opts.default
             raise CommandlineError.new("option '#{givenarg.arg}' needs a parameter")
           end
-          if opts.array_default?
-            raise Exception.new("badness")
-            #TODO# givenarg.params << [opts.default.clone.to_s]
-          else
-            #TODO# givenarg.params << [opts.default.to_s]
-          end
+          #if opts.array_default?
+          #  raise Exception.new("badness")
+          #  #TODO# givenarg.params << [opts.default.clone.to_s]
+          #else
+          #  #TODO# givenarg.params << [opts.default.to_s]
+          #end
         end
 
         # TODO re-enable permitted feature
-        #if givenarg.params.first && opts.permitted
-        #  givenarg.params.first.each do |val|
-        #    opts.validate_permitted(givenarg.arg, val)
-        #  end
-        #end
+        if opts.permitted && !givenarg.params.empty?
+          givenarg.params.each do |val|
+            opts.validate_permitted(givenarg.arg, val)
+          end
+        end
 
-        #TODO: vals["#{sym}_given"] = true # mark argument as specified on the commandline
-
-#        vals[sym] = opts.parse(givenarg.params, givenarg.negative_given)
+        #TODO: vals["#{ident}_given"] = true # mark argument as specified on the commandline
+        opts.add_argument_value(givenarg.params, givenarg.negative_given)
+        
+#        vals[ident] = 
 #
 #        if opts.min_args==0 && opts.max_args==1
 #          if opts.multi
-#            vals[sym] = vals[sym].map { |p| p[0] }
+#            vals[ident] = vals[ident].map { |p| p[0] }
 #          else
-#            vals[sym] = vals[sym][0][0]
+#            vals[ident] = vals[ident][0][0]
 #          end
 #        elsif opts.min_args==1 && opts.max_args==1
 #          if opts.multi         # multiple options, each with a single parameter
-#            vals[sym] = vals[sym].map { |p| p[0] }
+#            vals[ident] = vals[ident].map { |p| p[0] }
 #          else                  # single parameter
-#            vals[sym] = vals[sym][0][0]
+#            vals[ident] = vals[ident][0][0]
 #          end
 #        elsif opts.max_args>1 && !opts.multi?
-#          vals[sym] = vals[sym][0]  # single option, with multiple parameters
+#          vals[ident] = vals[ident][0]  # single option, with multiple parameters
 #        end
 #        # else: multiple options, with multiple parameters
 
         #        if !opts.callback.is_a?(Nil)
-        #          opts.callback.call(vals[sym])
+        #          opts.callback.call(vals[ident])
         #        end
         
       end
@@ -510,14 +531,14 @@ module Optimist
       bannertext += "#{@synopsis}\n" if @synopsis
       bannertext += "\n" if @usage || @synopsis
       bannertext += "#{@version}\n" if @version
-#      unless subcommands.empty?
-#        bannertext += "\n" if @version   
-#        bannertext += "Commands:\n"
-#        @subcommand_parsers.each_value do |scmd|
-#          bannertext += sprintf("  %-20s %s\n", scmd.name, scmd.desc)
-#        end
-#        bannertext += "\n"   
-#      end
+#SUBC#      unless subcommands.empty?
+#SUBC#        bannertext += "\n" if @version   
+#SUBC#        bannertext += "Commands:\n"
+#SUBC#        @subcommand_parsers.each_value do |scmd|
+#SUBC#          bannertext += sprintf("  %-20s %s\n", scmd.name, scmd.desc)
+#SUBC#        end
+#SUBC#        bannertext += "\n"   
+#SUBC#      end
       bannertext += "Options:\n"
       return bannertext
     end
@@ -529,29 +550,31 @@ module Optimist
       # call this unless the cursor's at the beginning of a line.
       calculate_width(stream)
 
-      left = {} of Symbol => String
+      left = {} of Ident => String
       @specs.each { |name, spec| left[name] = spec.educate }
 
       leftcol_width = left.values.map(&.size).max || 0
       rightcol_start = leftcol_width + 6 # spaces
 
       # print a default banner here if there is no text/banner
-      unless @order.size > 0 && @order.first.first == :text
+      unless @order.size > 0 && @order.first.is_a?(OrderedText)
         stream.puts default_banner()
       end
 
-      @order.each do |(what, opt)|
-        if what == :text
-          # print text/banner here
-          stream.puts wrap(opt)
-          next
+      @order.each do |item|
+        case item
+            in OrderedText
+            # print text/banner here
+            stream.puts wrap(item.str)
+            
+            in OrderedOpt
+            spec = @specs[item.str]
+            stream.printf "  %-#{leftcol_width}s    ", left[item.str]
+            desc = spec.full_description
+            
+            stream.puts wrap(desc, width: width - rightcol_start - 1, prefix: rightcol_start)
+            
         end
-
-        spec = @specs[opt]
-        stream.printf "  %-#{leftcol_width}s    ", left[opt]
-        desc = spec.full_description
-
-        stream.puts wrap(desc, width: width - rightcol_start - 1, prefix: rightcol_start)
       end
     end
 
@@ -696,9 +719,11 @@ module Optimist
     end
     
     def resolve_default_short_options!
-      @order.each do |(xtype, name)|
+      ordered_opts = @order.select { |x| x.is_a?(OrderedOpt) }
+      ordered_opts.each do |item|
+        name = item.str
         opts = @specs[name]
-        next if xtype != :opt || opts.doesnt_need_autogen_short
+        next if opts.doesnt_need_autogen_short
 
         c = opts.long.long.split(//).find { |d| d !~ Optimist::ShortNames::INVALID_ARG_REGEX && !@short.includes?(d) }
         if c # found a character to use
@@ -727,60 +752,50 @@ module Optimist
       ret
     end
 
-    ## instance_eval but with ability to handle block arguments
-    ## thanks to _why: http://redhanded.hobix.com/inspect/aBlockCostume.html
-    #def cloaker(&b)
-    #  (class << self; self; end).class_eval do
-    #    define_method :cloaker_, &b
-    #    meth = instance_method :cloaker_
-    #    remove_method :cloaker_
-    #    meth
-    #  end
-    #end
   end
 
-  # If used with subcommands, then return this object instead of a Hash.
-  class SubcommandResult
-    def initialize(subcommand : Symbol? = nil,
-                   global_options : Hash(String,String) = {} of String => String,
-                                                                subcommand_options : Hash(String,String) = {} of String => String,
-                                                                                                                 leftovers : Array(String) = [] of String)
-      @subcommand = subcommand
-      @global_options = global_options
-      @subcommand_options = subcommand_options
-      @leftovers = leftovers
-    end
-    property :subcommand, :global_options, :subcommand_options, :leftovers
-  end
-
-  class SubcommandParser < Parser
-
-    @name : Symbol
-    @desc : String?
-    
-    getter :name, :desc
-    def initialize(name, desc, *a, &b)
-      super(a, &b)
-      @name = name
-      @desc = desc
-    end
-
-    # alias to make referencing more obvious.
-    def subcommand_name
-      @name
-    end
-    
-    def default_banner()
-      command_name = File.basename($0).gsub(/\.[^.]+$/, "")
-      bannertext = ""
-      bannertext += "Usage: #{command_name} #{@name} #{@usage}\n\n" if @usage
-      bannertext += "#{@synopsis}\n\n" if @synopsis
-      bannertext += "#{desc}\n\n" if @desc
-      bannertext += "Options:\n"
-      return bannertext
-    end
-
-  end
+#SUBC#  # If used with subcommands, then return this object instead of a Hash.
+#SUBC#  class SubcommandResult
+#SUBC#    def initialize(subcommand : Symbol? = nil,
+#SUBC#                   global_options : Hash(String,String) = {} of String => String,
+#SUBC#                                                                subcommand_options : Hash(String,String) = {} of String => String,
+#SUBC#                                                                                                                 leftovers : Array(String) = [] of String)
+#SUBC#      @subcommand = subcommand
+#SUBC#      @global_options = global_options
+#SUBC#      @subcommand_options = subcommand_options
+#SUBC#      @leftovers = leftovers
+#SUBC#    end
+#SUBC#    property :subcommand, :global_options, :subcommand_options, :leftovers
+#SUBC#  end
+#SUBC#
+#SUBC#  class SubcommandParser < Parser
+#SUBC#
+#SUBC#    @name : Symbol
+#SUBC#    @desc : String?
+#SUBC#    
+#SUBC#    getter :name, :desc
+#SUBC#    def initialize(name, desc, *a, &b)
+#SUBC#      super(a, &b)
+#SUBC#      @name = name
+#SUBC#      @desc = desc
+#SUBC#    end
+#SUBC#
+#SUBC#    # alias to make referencing more obvious.
+#SUBC#    def subcommand_name
+#SUBC#      @name
+#SUBC#    end
+#SUBC#    
+#SUBC#    def default_banner()
+#SUBC#      command_name = File.basename($0).gsub(/\.[^.]+$/, "")
+#SUBC#      bannertext = ""
+#SUBC#      bannertext += "Usage: #{command_name} #{@name} #{@usage}\n\n" if @usage
+#SUBC#      bannertext += "#{@synopsis}\n\n" if @synopsis
+#SUBC#      bannertext += "#{desc}\n\n" if @desc
+#SUBC#      bannertext += "Options:\n"
+#SUBC#      return bannertext
+#SUBC#    end
+#SUBC#
+#SUBC#  end
 
   
 end

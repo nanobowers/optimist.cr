@@ -1,8 +1,10 @@
 module Optimist
   
 class LongNames
+
+  alias LongName = Symbol | String | Nil
   
-  @truename : Symbol?
+  @truename : String?
   @long : String?
   
   def initialize
@@ -19,9 +21,13 @@ class LongNames
       raise ArgumentError.new("invalid long option name #{lopt.inspect}")
     end
   end
+
+  def to_s() : String
+    @long.to_s
+  end
   
-  def set(name : Symbol, lopt : String?, alts : AlternatesType)
-    @truename = name
+  def set(name : LongName, lopt : String?, alts : AlternatesType)
+    @truename = name.to_s
     valid_lopt = case lopt
                      in String
                      lopt
@@ -51,6 +57,9 @@ end
 
 class ShortNames
 
+  alias ShortArg = String | Char
+  alias ShortArgs = Array(String) | Array(Char)
+  
   INVALID_ARG_REGEX = /[\d-]/
 
   getter :chars, :auto
@@ -59,27 +68,37 @@ class ShortNames
     @chars = [] of String
     @auto = true
   end
-  
-  def add(values)
-    values = [values] unless values.is_a?(Array) # box the value
-    values.compact.each do |val|
-      if val == :none
-        @auto = false
-        raise "Cannot set short to :none if short-chars have been defined '#{@chars}'" unless chars.empty?
-        next
-      end
-      strval = val.to_s
-      sopt = case strval
-             when /^-(.)$/ then $1
-             when /^.$/ then strval
-             else raise ArgumentError.new("invalid short option name '#{val.inspect}'")
-             end
 
-      if sopt =~ INVALID_ARG_REGEX
-        raise ArgumentError.new("short option name '#{sopt}' can't be a number or a dash")
-      end
-      @chars << sopt
+  def add(value : ShortArg)
+    sopt = case (strval = value.to_s)
+           when /^-(.)$/ then $1
+           when /^.$/ then strval
+           else raise ArgumentError.new("invalid short option name '#{value.inspect}'")
+           end
+
+    if sopt =~ INVALID_ARG_REGEX
+      raise ArgumentError.new("short option name '#{sopt}' can't be a number or a dash")
     end
+    @chars << sopt
+  end
+
+
+  # Overload for true/false values:
+  def add(value : Bool?)
+    case value
+        in true
+        raise ArgumentError.new("cannot use value 'true' in short-chars")
+        in nil
+        # do nothing
+        in false
+        @auto = false
+        raise ArgumentError.new("cannot set short to false if short-chars have been defined '#{@chars}'") unless @chars.empty?
+    end
+  end
+  
+  # Handle an Array of ShortArgs
+  def add(values : ShortArgs)
+    values.each { |v| add(v) }
   end
   
 end

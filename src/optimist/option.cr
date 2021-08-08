@@ -1,39 +1,48 @@
 module Optimist
-  
-  class Option
-    
+
+  abstract class Option
+
+    abstract def default
+    abstract def add_argument_value(a  : Array(String), b : Bool)
+    abstract def value
+        
     getter :short
-    property :name, :long, :default, :permitted, :permitted_response
-    setter :multi_given
+    property :name, :long, :permitted, :permitted_response
 
     # defaults
-    @name : Symbol
-    @default : DefaultType
+    @name : String
+    #@default : T?
     @permitted : PermittedType
     @callback : Proc(String,String)?
     @desc : String
+    @given : Bool
+    @arguments_applied : Int32
     
-    def initialize(name, desc, default)
+    def initialize(name, desc, default : T) forall T
       @long = LongNames.new
       # can be an Array of one-char strings, a one-char String, nil or false
       @short = ShortNames.new
       @callback = nil
-      @name = :__unknown
+      @name = "__unknown__"
       @desc = ""
-      @multi_given = false
+      #@multi_given = false
       @hidden = false
       @default = default
       @permitted = nil
       @permitted_response = "option '%{arg}' only accepts %{valid_string}"
       @required = false
-
+      @arguments_applied = 0
       @min_args = 1
       # note: maximum max_args is likely ~~ 128*1024, as
       # linux MAX_ARG_STRLEN is 128kiB
       @max_args = 1
+
+      # Was the option given or not. SET BY *PARSE*
+      @given = false
     end
-    
-    
+
+    def multi ; false ; end
+
     # Check that an option is compatible with another option.
     # By default, checking that they are the same class, but we
     # can override this in the subclass as needed.
@@ -41,17 +50,8 @@ module Optimist
       typeof(self) == typeof(other_option)
     end
 
-#    def opts(key)
-#      @optshash[key]
-#    end
+    #def multi ; @multi_given ; end
 
-#    def opts=(o)
-#      @optshash = o
-#    end
-
-
-    def multi ; @multi_given ; end
-    #alias_method :multi?, :multi
 
     getter :min_args, :max_args
     # |@min_args | @max_args |
@@ -61,19 +61,14 @@ module Optimist
     # | 1        | >1        | formerly multi_arg?==true 
     # | ?        | ?         | presumably illegal condition. untested.
     
-    def array_default? ; self.default.is_a?(Array) ; end
+    #kill# def array_default? ; self.default.is_a?(Array) ; end
 
+    ## TODO: push into SHORT
     def doesnt_need_autogen_short ; !short.auto || !short.chars.empty? ; end
 
-    property :callback, :desc # def callback ; opts(:callback) ; end
+    property :callback, :desc
     
-    #def desc ; opts(:desc) ; end
-
-    def required? ; @required ; end
-
-    def parse(_paramlist, _neg_given)
-      raise NotImplementedError.new("parse must be overridden for newly registered type")
-    end
+    getter? :required
 
     # provide type-format string.  default to empty, but user should probably override it
     def type_format ; "" ; end
@@ -89,7 +84,8 @@ module Optimist
     def full_description
       desc_str = desc
       desc_str = description_with_default desc_str if default
-#TODO      desc_str = description_with_permitted desc_str if permitted
+      #TODO
+      desc_str = description_with_permitted desc_str if permitted
       desc_str
     end
 
@@ -106,11 +102,11 @@ module Optimist
     ## Format the educate-line description including the default-value(s)
     def description_with_default(str)
       return str unless default
-      #default_s = if default.is_a?(Array)
-      #              default.join(", ")
-      #            else
-      #              format_stdio(default).to_s
-      #            end
+      #OLD# default_s = if default.is_a?(Array)
+      #OLD#              default.join(", ")
+      #OLD#            else
+      #OLD#              format_stdio(default).to_s
+      #OLD#            end
       default_s = default.inspect
       return "#{str} (Default: #{default_s})"
     end
@@ -118,28 +114,31 @@ module Optimist
     ## Format the educate-line description including the permitted-value(s)
     def description_with_permitted(str)
       permitted_s = case permitted
-                    in Array
-                      permitted.map do |p|
-                        format_stdio(p).to_s
-                      end.join(", ")
-                    in Range
-                      permitted.to_a.map(&.to_s).join(", ")
-                    in Regex
-                      permitted.to_s
+                        in Array
+                        permitted.as(Array).map do |p|
+                          format_stdio(p).to_s
+                        end.join(", ")
+                        in Range
+                        permitted.as(Range).to_a.map(&.to_s).join(", ")
+                        in Regex, Nil
+                        permitted.to_s
                     end
       return "#{str} (Permitted: #{permitted_s})"
     end
 
-    def permitted_valid_string
-      case permitted
-      in Array
-        return "one of: " + permitted.to_a.map(&.to_s).join(", ")
-      in Range
-        return "value in range of: #{permitted}"
-      in Regex
-        return "value matching: #{permitted.inspect}"
-      end
-      raise Exception, "invalid branch"
+    # Format permitted string
+    
+    def permitted_valid_string(permitted : Array) : String
+      "one of: " + permitted.map(&.to_s).join(", ")
+    end
+    def permitted_valid_string(permitted : Range) : String
+      "value in range of: #{permitted}"
+    end
+    def permitted_valid_string(permitted : Regex) : String
+      "value matching: #{permitted.inspect}"
+    end
+    def permitted_valid_string(permitted : Nil)
+      "unpermitted"
     end
     
     def permitted_type_valid?
@@ -153,7 +152,7 @@ module Optimist
     def validate_permitted(arg : String, value : DefaultType) : Void
       return true if permitted.nil?
       unless permitted_value?(value)
-        format_hash = {arg: arg, given: value, value: value, valid_string: permitted_valid_string(), permitted: permitted }
+        format_hash = {arg: arg, given: value, value: value, valid_string: permitted_valid_string(permitted), permitted: permitted }
         raise CommandlineError.new(permitted_response % format_hash)
       end
     end
@@ -162,27 +161,22 @@ module Optimist
     # stringify any permitted types as the basis of comparison.
     def permitted_value?(val : DefaultType) : Bool
       valstr = val.to_s
-      if @permitted.is_a?(Regex)
-        return @permitted =~ valstr
-      elsif permitted.is_a?(Array)
-        return permitted.map(&.to_s).includes? valstr
-      elsif permitted.is_a?(Range)
-        return permitted.to_a.map(&.to_s).includes? valstr
-      elsif permitted.nil?
-        return true
-      else
-        false
+      case @permitted
+           in Regex
+           return !((@permitted =~ valstr).nil?)
+           in Array
+           return permitted.as(Array).map(&.to_s).includes? valstr
+           in Range
+           return permitted.as(Range).to_a.map(&.to_s).includes? valstr
+           in Nil
+           return true
       end
     end  
     
-
-
-    ## Factory class methods ...
-
+    ## Factory class method
     # Determines which type of object to create based on arguments passed
-    # to +Optimist::opt+.  This is trickier in Optimist, than other cmdline
-    # parsers (e.g. Slop) because we allow the +default:+ to be able to
-    # set the option's type.
+    # to +Optimist::opt+.  This is tricky because we allow the +default:+
+    # to be able to set the option's type.
     def self.create(name, desc,
                     cls : Class? = nil,
                     long : String? = nil,
@@ -216,72 +210,16 @@ module Optimist
         opt_inst = cls.new(name, desc, default)
       end
       
-      # p! opt_inst
-      
-      #opttype = Optimist::Parser.registry_getopttype(otype)
-      #opttype_from_default = get_klass_from_default(opts, opttype)
-      #DEBUG# puts "\nopt:#{opttype||"nil"} ofd:#{opttype_from_default}"  if opttype_from_default
-      #if opttype && opttype_from_default && !opttype.compatible_with?(opttype_from_default) # opttype.is_a? opttype_from_default.class
-      #  raise ArgumentError, ":type specification (#{opttype.class}) and default type don't match (default type is #{opttype_from_default.class})" 
-      #end
-      #opt_inst = (opttype || opttype_from_default || Optimist::BooleanOption.new)
+      opt_inst.long.set(name, long, alt)   ## fill in long/alt opts
+      opt_inst.short.add short             ## fill in short opts
 
-      ## fill in :long
-      opt_inst.long.set(name, long, alt)
-
-      ## fill in :short
-      opt_inst.short.add short
-
-      ## fill in :multi
-
-      opt_inst.multi_given = multi_given = multi
-
-      ## autobox :default for :multi (multi-occurrence) arguments
-      #defvalue = [defvalue] if defvalue && multi_given && !defvalue.kind_of?(Array)
       ## fill in permitted values
       opt_inst.permitted = permitted
       opt_inst.permitted_response = permitted_response if permitted_response
-      #opt_inst.default = defvalue
       opt_inst.name = name
-      #opt_inst.opts = opts
 
-      
-      opt_inst
+      return opt_inst # some sort of Option
     end
-
-
-    def self.get_type_from_disdef(optdef, opttype, disambiguated_default)
-      if disambiguated_default.is_a? Array
-        return(optdef.first.class.name.downcase + "s") if !optdef.empty?
-        if opttype
-          raise ArgumentError.new("multiple argument type must be plural") unless opttype.max_args > 1
-          return nil
-        else
-          raise ArgumentError.new("multiple argument type cannot be deduced from an empty array")
-        end
-      end
-      return disambiguated_default.class.name.downcase
-    end
-
-    def self.get_klass_from_default(opts, opttype)
-      ## for options with :multi => true, an array default doesn't imply
-      ## a multi-valued argument. for that you have to specify a :type
-      ## as well. (this is how we disambiguate an ambiguous situation;
-      ## see the docs for Parser#opt for details.)
-
-      disambiguated_default = if opts[:multi] && opts[:default].is_a?(Array) && opttype.nil?
-                                opts[:default].first
-                              else
-                                opts[:default]
-                              end
-
-      return nil if disambiguated_default.nil?
-      type_from_default = get_type_from_disdef(opts[:default], opttype, disambiguated_default)
-      return Optimist::Parser.registry_getopttype(type_from_default)
-    end
-
-    #private_class_method :get_type_from_disdef
-    #private_class_method :get_klass_from_default
 
     def self.handle_long_opt(lopt, name)
       lopt = lopt ? lopt.to_s : name.to_s.gsub("_", "-")
@@ -308,120 +246,139 @@ module Optimist
     
   end
 
+  ################################################
+  ################################################
+  ################################################
+  
   # Flag option.  Has no arguments. Can be negated with "no-".
   class BooleanOption < Option
-
+    @value : Bool?
+    @default : Bool?
+    getter :value, :default
     def initialize(name, desc, default : Bool?)
       super
+      @value = nil
       @default = default.nil? ? false : default
       @min_args = 0
       @max_args = 0
     end
     
-    def parse(_paramlist, neg_given)
-      return(self.name.to_s =~ /^no_/ ? neg_given : !neg_given)
+    def add_argument_value(_paramlist : Array(String), neg_given)
+      @value = (self.name.to_s =~ /^no_/) ? neg_given : !neg_given
+      @given = true
+    end
+    def multi : Bool ; false ; end
+  end
+
+  # Integer number option class.
+  class IntOption < Option
+    @value : Int32?
+    @default : Int32?
+    getter :value, :default
+    
+    def initialize(name, desc, default : Int32?)
+      super
+      @value = nil
+      @default = default
+    end
+
+    def add_argument_value(val : String)
+      @value = val.to_i
+    end
+    
+    def multi : Bool ; false ; end
+    def type_format ; "=<i>" ; end
+    def add_argument_value(paramlist : Array(String), _neg_given)
+      param = paramlist.first
+      unless param =~  /^-?[\d_]+$/
+        raise CommandlineError.new("option '#{self.name}' needs a floating-point number")
+      end
+      @value = param.to_i
+      @given = true
     end
   end
 
   # Floating point number option class.
   class FloatOption < Option
+    @value : Float64?
+    @default : Float64?
+    getter :value, :default
     def initialize(name, desc, default : Float64?)
       super
+      @value = nil
       @default = default
     end
+    def multi : Bool ; false ; end
     
     def type_format ; "=<f>" ; end
-    def parse(paramlist, _neg_given)
-      paramlist.map do |pg|
-        pg.map do |param|
-          unless param =~ FLOAT_RE
-            raise CommandlineError.new("option '#{self.name}' needs a floating-point number")
-          end
-          param.to_f
-        end
+    def add_argument_value(paramlist : Array(String), _neg_given)
+      param = paramlist.first
+      unless param =~ FLOAT_RE
+        raise CommandlineError.new("option '#{self.name}' needs a floating-point number")
       end
+      @value = param.to_f
+      @given = true
     end
   end
 
-  # Integer number option class.
-  class IntOption < Option
-    
-    def initialize(name, desc, default : Int32?)
-      super
-      @default = default
-    end
-    
-    def type_format ; "=<i>" ; end
-    def parse(paramlist, _neg_given)
-      paramlist.map do |pg|
-        pg.map do |param|
-          unless param =~ /^-?[\d_]+$/
-            raise CommandlineError.new("option '#{self.name}' needs an integer")
-          end
-          param.to_i
-        end
-      end
-    end
-  end
 
   # Option class for handling IO objects and URLs.
   # Note that this will return the file-handle, not the file-name
   # in the case of file-paths given to it.
   class IOOption < Option
-
+    
+    @value : IO::FileDescriptor?
+    @default : IO::FileDescriptor?
+    getter :value, :default
+    def multi : Bool ; false ; end
     def type_format ; "=<filename/uri>" ; end
-    def parse(paramlist, _neg_given)
-      paramlist.map do |pg|
-        pg.map do |param|
-          if param =~ /^(stdin|-)$/i
-            STDIN
-          else
-            #require "open-uri"
-            #begin
-            #  open param
-            #rescue SystemCallError => e
-            #  raise CommandlineError, "file or url for option '#{self.name}' cannot be opened: #{e.message}"
-            #end
-            File.open(param)
-          end
-        end
-      end
+    def add_argument_value(paramlist : Array(String), _neg_given)
+      param = paramlist.first
+      @value = if param =~ /^(stdin|\-)$/i
+                 STDIN
+               else
+                 File.open(param)
+               end
+      @given = true
     end
   end
 
   # Option class for handling Strings.
   class StringOption < Option
-
+    @value : String?
+    @default : String?
+    getter :value, :default
+    
+    def multi : Bool ; false ; end
     def type_format ; "=<s>" ; end
-    def parse(paramlist, _neg_given)
-      paramlist.map { |pg| pg.map(&.to_s) }
+    def add_argument_value(paramlist : Array(String), _neg_given)
+      @value = paramlist.first
+      @given = true
     end
   end
 
   # 
   class StringFlagOption < StringOption
-
-    def type_format ; "=<s?>" ; end
-    def parse(paramlist, neg_given)
-      paramlist.map do |plist|
-        plist.map do |pg|
-          neg_given ? false : pg
-          #case pg
-          #when FalseClass then () ? neg_given : !neg_given
-          #when TrueClass then (self.name.to_s =~ /^no_/) ? neg_given : !neg_given
-          #else pg
-          #end
-        end
-      end
-    end
-
-    def initialize(name, desc, default : Bool?)
+    @value : String?
+    @default : String?
+    getter :value, :default
+    def initialize(name, desc, @default : String?)
       super
-      @default = default.nil? ? false : default
+      #@default = default.nil? ? false : default
       @min_args = 0
       @max_args = 1
     end
-    
+    def multi : Bool ; false ; end
+    def type_format ; "=<s?>" ; end
+    def add_argument_value(paramlist : Array(String), neg_given)
+      @given = true
+      
+      @value = case paramlist.size
+               when 0 then nil
+               when 1 then paramlist.first
+               else raise ArgumentError.new("Too many params given")
+               end
+    end
     def compatible_with?(other_option)
       selftype = typeof(self)
       selftype == typeof(other_option) ||
@@ -431,58 +388,48 @@ module Optimist
 
   end
 
-
-  class DateOption < Option
-
-    def type_format ; "=<date>" ; end
-    def parse(paramlist, _neg_given)
-      paramlist.map do |pg|
-        pg.map do |param|
-          if param.is_a?(Time)
-            param
-          elsif param.is_a?(String)
-            Time.parse!(param, "%Y-%m-%d")
-          else
-            raise CommandlineError.new("option '#{self.name}' needs a date")
-          end
-        end
-      end
+###
+###
+###  ### MULTI_OPT_TYPES :
+###  ## The set of values that indicate a multiple-parameter option (i.e., that
+###  ## takes multiple space-separated values on the commandline) when passed as
+###  ## the +:type+ parameter of #opt.
+###
+###  # Option class for handling multiple Integers
+###  class IntArrayOption < IntOption
+###    def multi ; true ; end
+###    def type_format ; "=<i+>" ; end
+###    #def initialize ; super ; @max_args = 999 ; end
+###  end
+###
+###  # Option class for handling multiple Floats
+###  class FloatArrayOption < FloatOption
+###    def type_format ; "=<f+>" ; end
+###    #def initialize ; super ; @max_args = 999 ; end
+###  end
+###
+###  # Option class for handling multiple Strings
+  class StringArrayOption < Option
+    @value : Array(String)
+    @default : Array(String)
+    getter :value, :default
+    
+    def multi : Bool ; false ; end
+    def type_format ; "=<s+>" ; end
+    def add_argument_value(paramlist : Array(String), _neg_given)
+      @value.concat paramlist
+      @given = true
+    end
+    def initialize
+      super
+      @value = [] of String
     end
   end
-
-  ### MULTI_OPT_TYPES :
-  ## The set of values that indicate a multiple-parameter option (i.e., that
-  ## takes multiple space-separated values on the commandline) when passed as
-  ## the +:type+ parameter of #opt.
-
-  # Option class for handling multiple Integers
-  class IntArrayOption < IntOption
-    def type_format ; "=<i+>" ; end
-    #def initialize ; super ; @max_args = 999 ; end
-  end
-
-  # Option class for handling multiple Floats
-  class FloatArrayOption < FloatOption
-    def type_format ; "=<f+>" ; end
-    #def initialize ; super ; @max_args = 999 ; end
-  end
-
-  # Option class for handling multiple Strings
-  class StringArrayOption < StringOption
-    def type_format ; "=<s+>" ; end
-    #def initialize ; super ; @max_args = 999 ; end
-  end
-
-  # Option class for handling multiple dates
-  class DateArrayOption < DateOption
-    def type_format ; "=<date+>" ; end
-    #def initialize ; super ; @max_args = 999 ; end
-  end
-
-  # Option class for handling Files/URLs via 'open'
-  class IOArrayOption < IOOption
-    def type_format ; "=<filename/uri+>" ; end
-    #def initialize(name ; super ; @max_args = 999 ; end
-  end
+###
+###  # Option class for handling Files/URLs via 'open'
+###  class IOArrayOption < IOOption
+###    def type_format ; "=<filename/uri+>" ; end
+###    #def initialize(name ; super ; @max_args = 999 ; end
+###  end
 
 end
