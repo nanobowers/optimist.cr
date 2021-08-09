@@ -1,11 +1,14 @@
 module Optimist
 
-## Regex for floating point numbers
-FLOAT_RE = /^-?((\d+(\.\d+)?)|(\.\d+))([eE][-+]?[\d]+)?$/
-
-## Regex for parameters
-PARAM_RE = /^-(-|\.$|[^\d\.])/
-
+  ## Regex for integer numbers
+  INT_RE = /^-?[\d_]+$/
+  
+  ## Regex for floating point numbers
+  FLOAT_RE = /^-?((\d+(\.\d+)?)|(\.\d+))([eE][-+]?[\d]+)?$/
+  
+  ## Regex for parameters
+  PARAM_RE = /^-(-|\.$|[^\d\.])/
+  
 
 ## The easy, syntactic-sugary entry method into Optimist. Creates a Parser,
 ## passes the block to it, then parses +args+ with it, handling any errors or

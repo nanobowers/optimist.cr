@@ -1,6 +1,7 @@
 #require "stringio"
 require "./spec_helper"
 require "../src/optimist"
+
 include Optimist
 
 describe Optimist::Parser do
@@ -41,19 +42,19 @@ describe Optimist::Parser do
 
 
   it "handles unknown arguments" do
-    expect_raises(CommandlineError, /unknown argument '--arg'/) {
+    expect_raises(CommandlineError, /Unknown argument '--arg'/) {
       parser.parse(%w(--arg))
     }
     parser.opt :arg
     parser.parse(%w(--arg))
-    err = expect_raises(CommandlineError, /unknown argument '--arg2'/) {
+    err = expect_raises(CommandlineError, /Unknown argument '--arg2'/) {
       parser.parse(%w(--arg2))
     }
   end
   
   it "tests_unknown_arguments_with_suggestions" do
     sugp = Parser.new(suggestions: true)
-    err = expect_raises(CommandlineError, /unknown argument '--bone'$/) {
+    err = expect_raises(CommandlineError, /Unknown argument '--bone'$/) {
       sugp.parse(%w(--bone))
     }
 
@@ -61,36 +62,36 @@ describe Optimist::Parser do
     sugp.parse(%w(--cone))
 
       # single letter mismatch
-      msg = /unknown argument '--bone'.  Did you mean: \[--cone\] \?$/
+      msg = /Unknown argument '--bone'.  Did you mean: \[--cone\] \?$/
       expect_raises(CommandlineError, msg) { sugp.parse(%w(--bone)) }
 
       # transposition
-      msg  = /unknown argument '--ocne'.  Did you mean: \[--cone\] \?$/
+      msg  = /Unknown argument '--ocne'.  Did you mean: \[--cone\] \?$/
       expect_raises(CommandlineError, msg) { sugp.parse(%w(--ocne)) }
       
 
       # extra letter at end
-      msg = /unknown argument '--cones'.  Did you mean: \[--cone\] \?$/
+      msg = /Unknown argument '--cones'.  Did you mean: \[--cone\] \?$/
       expect_raises(CommandlineError, msg) { sugp.parse(%w(--cones)) }
 
 
       # too big of a mismatch to suggest (extra letters in front)
-      msg = /unknown argument '--snowcone'$/
+      msg = /Unknown argument '--snowcone'$/
       err = expect_raises(CommandlineError, msg) { sugp.parse(%w(--snowcone)) }
 
       # too big of a mismatch to suggest (nothing close)
-      msg = /unknown argument '--clown-nose'$/
+      msg = /Unknown argument '--clown-nose'$/
       expect_raises(CommandlineError, msg) { sugp.parse(%w(--clown-nose)) }
 
       sugp.opt :zippy
       sugp.opt :zapzy
       # single letter mismatch, matches two
-      msg = /unknown argument '--zipzy'.  Did you mean: \[--zippy, --zapzy\] \?$/
+      msg = /Unknown argument '--zipzy'.  Did you mean: \[--zippy, --zapzy\] \?$/
       expect_raises(CommandlineError, msg) { sugp.parse(%w(--zipzy)) }
 
       sugp.opt :big_bug
       # suggest common case of dash versus underscore in argnames
-      msg = /unknown argument '--big_bug'.  Did you mean: \[--big-bug\] \?$/
+      msg = /Unknown argument '--big_bug'.  Did you mean: \[--big-bug\] \?$/
       expect_raises(CommandlineError, msg) { sugp.parse(%w(--big_bug)) }
 
     
@@ -117,8 +118,8 @@ describe Optimist::Parser do
 
   ## flags that take an argument error unless given one
   it "tests_argflags_demand_args" do
-    parser.opt :goodarg, "desc", type: String
-    parser.opt :goodarg2, "desc", type: String
+    parser.opt :goodarg, "desc", cls: StringOpt
+    parser.opt :goodarg2, "desc", cls: StringOpt
 
     parser.parse(%w(--goodarg goat))
     expect_raises(CommandlineError) { parser.parse(%w(--goodarg --goodarg2 goat)) }
@@ -132,15 +133,15 @@ describe Optimist::Parser do
     parser.parse(%w(--goodarg))
     parser.parse(%w(--goodarg --goodarg2))
     opts = parser.parse %w(--goodarg a)
-    opts[:goodarg].should eq true
+    opts["goodarg"].value.should eq true
     parser.leftovers.should eq ["a"]
   end
 
   ## flags that require args of a specific type refuse args of other
   ## types
   it "tests_typed_args_refuse_args_of_other_types" do
-    parser.opt :goodarg, "desc", type: :int
-    expect_raises(ArgumentError) { parser.opt :badarg, "desc", type: :asdf }
+    parser.opt :goodarg, "desc", cls: Int32Opt
+    #expect_raises(ArgumentError) { parser.opt :badarg, "desc", cls: :asdf }
 
     parser.parse(%w(--goodarg 3))
     expect_raises(CommandlineError) { parser.parse(%w(--goodarg 4.2)) }
@@ -149,20 +150,17 @@ describe Optimist::Parser do
 
   ## type is correctly derived from :default
   it "tests_type_correctly_derived_from_default" do
-  #KILL  expect_raises(ArgumentError) { parser.opt :badarg, "desc", default: [] }
-  #KILL  expect_raises(ArgumentError) { parser.opt :badarg3, "desc", default: [{1 => 2}] }
-  #KILL  expect_raises(ArgumentError) { parser.opt :badarg4, "desc", default: Hash.new }
 
     # single arg: int
     parser.opt :argsi, "desc", default: 0
     opts = parser.parse(%w(--))
-    opts[:argsi].should eq 0
+    opts["argsi"].value.should eq 0
     opts = parser.parse(%w(--argsi 4))
-    opts[:argsi].should eq 4
+    opts["argsi"].value.should eq 4
     opts = parser.parse(%w(--argsi=4))
-    opts[:argsi].should eq 4
+    opts["argsi"].value.should eq 4
     opts = parser.parse(%w(--argsi=-4))
-    opts[:argsi].should eq -4
+    opts["argsi"].value.should eq -4
 
     expect_raises(CommandlineError) { parser.parse(%w(--argsi 4.2)) }
     expect_raises(CommandlineError) { parser.parse(%w(--argsi hello)) }
@@ -170,86 +168,76 @@ describe Optimist::Parser do
     # single arg: float
     parser.opt :argsf, "desc", default: 3.14
     opts = parser.parse(%w(--))
-    opts[:argsf].should eq 3.14
+    opts["argsf"].value.should eq 3.14
     opts = parser.parse(%w(--argsf 2.41))
-    opts[:argsf].should eq 2.41
+    opts["argsf"].value.should eq 2.41
     opts = parser.parse(%w(--argsf 2))
-    opts[:argsf].should eq 2
+    opts["argsf"].value.should eq 2
     opts = parser.parse(%w(--argsf 1.0e-2))
-    opts[:argsf].should eq 1.0e-2
+    opts["argsf"].value.should eq 1.0e-2
     expect_raises(CommandlineError) { parser.parse(%w(--argsf hello)) }
-
-#    # single arg: date
-#    date = Date.today
-#    parser.opt :argsd, "desc", default: date
-#    opts = parser.parse(%w(--))
-#    opts[:argsd].should eq Date.today
-#    opts = parser.parse(["--argsd", "Jan 4, 2007"])
-#    opts[:argsd].should eq Date.civil(2007, 1, 4)
-#    expect_raises(CommandlineError) { parser.parse(%w(--argsd hello)) }
 
     # single arg: string
     parser.opt :argss, "desc", default: "foobar"
     opts = parser.parse(%w(--))
-    opts[:argss].should eq "foobar"
+    opts["argss"].value.should eq "foobar"
     opts = parser.parse(%w(--argss 2.41))
-    opts[:argss].should eq "2.41"
+    opts["argss"].value.should eq "2.41"
     opts = parser.parse(%w(--argss hello))
-    opts[:argss].should eq "hello"
+    opts["argss"].value.should eq "hello"
 
 #    # multi args: ints
 #    parser.opt :argmi, "desc", default: [3, 5]
 #    opts = parser.parse(%w(--))
-#    opts[:argmi].should eq [3, 5]
+#    opts[:argmi].value.should eq [3, 5]
 #    opts = parser.parse(%w(--argmi 4))
-#    opts[:argmi].should eq [4]
+#    opts[:argmi].value.should eq [4]
 #    expect_raises(CommandlineError) { parser.parse(%w(--argmi 4.2)) }
 #    expect_raises(CommandlineError) { parser.parse(%w(--argmi hello)) }
 #
 #    # multi args: floats
 #    parser.opt :argmf, "desc", default: [3.34, 5.21]
 #    opts = parser.parse(%w(--))
-#    opts[:argmf].should eq [3.34, 5.21]
+#    opts[:argmf].value.should eq [3.34, 5.21]
 #    opts = parser.parse(%w(--argmf 2))
-#    opts[:argmf].should eq [2]
+#    opts[:argmf].value.should eq [2]
 #    opts = parser.parse(%w(--argmf 4.0))
-#    opts[:argmf].should eq [4.0]
+#    opts[:argmf].value.should eq [4.0]
 #    expect_raises(CommandlineError) { parser.parse(%w(--argmf hello)) }
 #
 #    # multi args: dates
 #    dates = [Date.today, Date.civil(2007, 1, 4)]
 #    parser.opt :argmd, "desc", default: dates
 #    opts = parser.parse(%w(--))
-#    opts[:argmd].should eq dates
+#    opts[:argmd].value.should eq dates
 #    opts = parser.parse(["--argmd", "Jan 4, 2007"])
-#    opts[:argmd].should eq [Date.civil(2007, 1, 4)]
+#    opts[:argmd].value.should eq [Date.civil(2007, 1, 4)]
 #    expect_raises(CommandlineError) { parser.parse(%w(--argmd hello)) }
 #
 #    # multi args: strings
 #    parser.opt :argmst, "desc", default: %w(hello world)
 #    opts = parser.parse(%w(--))
-#    opts[:argmst].should eq %w(hello world)
+#    opts[:argmst].value.should eq %w(hello world)
 #    opts = parser.parse(%w(--argmst 3.4))
-#    opts[:argmst].should eq ["3.4"]
+#    opts[:argmst].value.should eq ["3.4"]
 #    opts = parser.parse(%w(--argmst goodbye))
-#    opts[:argmst].should eq ["goodbye"]
+#    opts[:argmst].value.should eq ["goodbye"]
   end
 
-  ## :type and :default must match if both are specified
+  ## cls: and default: must match if both are specified
   it "tests_type_and_default_must_match" do
-    expect_raises(ArgumentError) { parser.opt :badarg, "desc", type: IntOption, default: "hello" }
-    expect_raises(ArgumentError) { parser.opt :badarg2, "desc", type: StringOption, default: 4 }
-    expect_raises(ArgumentError) { parser.opt :badarg2, "desc", type: StringOption, default: "hi" }
-    #expect_raises(ArgumentError) { parser.opt :badarg2, "desc", type: :ints, default: [3.14] }
+    # Cannot test mismatch of cls: and default: here, because it is a compiler error.
+    #expect_raises(ArgumentError) { parser.opt :badarg, "desc", cls: Int32Opt, default: "hello" }
+    #expect_raises(ArgumentError) { parser.opt :badarg2, "desc", cls: StringOpt, default: 4 }
+    #expect_raises(ArgumentError) { parser.opt :badarg2, "desc", cls: StringOpt, default: "hi" }
+    #expect_raises(ArgumentError) { parser.opt :badarg2, "desc", cls: :ints, default: [3.14] }
 
-    parser.opt :argsi, "desc", type: IntOption, default: 4
-    parser.opt :argsf, "desc", type: FloatOption, default: 3.14
-#    parser.opt :argsd, "desc", type: :date, default: Date.today
-    parser.opt :argss, "desc", type: StringOption, default: "yo"
-#    parser.opt :argmi, "desc", type: :ints, default: [4]
-#    parser.opt :argmf, "desc", type: :floats, default: [3.14]
-#    parser.opt :argmd, "desc", type: :dates, default: [Date.today]
-#    parser.opt :argmst, "desc", type: :strings, default: ["yo"]
+    parser.opt :argsi, "desc", cls: Int32Opt, default: 4
+    parser.opt :argsf, "desc", cls: Float64Opt, default: 3.14
+    parser.opt :argss, "desc", cls: StringOpt, default: "yo"
+#    parser.opt :argmi, "desc", cls: :ints, default: [4]
+#    parser.opt :argmf, "desc", cls: :floats, default: [3.14]
+#    parser.opt :argmst, "desc", cls: :strings, default: ["yo"]
   end
 
   ##
@@ -257,33 +245,33 @@ describe Optimist::Parser do
     parser.opt :argd, "desc", default: "default_string"
 
     opts = parser.parse(%w(--))
-    opts[:argd_given]?.should be_falsey
-    opts[:argd].should eq "default_string"
+    opts["argd"].given?.should be_false
+    opts["argd"].value.should eq "default_string"
 
     opts = parser.parse(%w( --argd ))
-    opts[:argd_given]?.should be_true
-    opts[:argd].should eq "default_string"
+    opts["argd"].given?.should be_true
+    opts["argd"].value.should eq "default_string"
 
     opts = parser.parse(%w(--argd different_string))
-    opts[:argd_given]?.should be_true
-    opts[:argd].should eq "different_string"
+    opts["argd"].given?.should be_true
+    opts["argd"].value.should eq "different_string"
   end
 
 #  it "tests_flag_with_no_defaults_and_no_args_act_as_switches_array" do
-#    parser.opt :argd, "desc", type: :strings, default: ["default_string"]
+#    parser.opt :argd, "desc", cls: :strings, default: ["default_string"]
 #    opts = parser.parse(%w(--argd))
 #    opts[:argd].should eq ["default_string"]
 #  end
 
 #  it "tests_type_and_empty_array" do
-#    parser.opt :argmi, "desc", type: :ints, default: [] of Int32
-#    parser.opt :argmf, "desc", type: :floats, default: [] of Float
-#    parser.opt :argmd, "desc", type: :dates, default: [] of Date
-#    parser.opt :argms, "desc", type: :strings, default: [] of String
-#    expect_raises(ArgumentError) { parser.opt :badi, "desc", type: :int, default: [] of Int }
-#    expect_raises(ArgumentError) { parser.opt :badf, "desc", type: :float, default: [] of Float }
-#    expect_raises(ArgumentError) { parser.opt :badd, "desc", type: :date, default: [] of Date }
-#    expect_raises(ArgumentError) { parser.opt :bads, "desc", type: :string, default: [] of String }
+#    parser.opt :argmi, "desc", cls: :ints, default: [] of Int32
+#    parser.opt :argmf, "desc", cls: :floats, default: [] of Float
+#    parser.opt :argmd, "desc", cls: :dates, default: [] of Date
+#    parser.opt :argms, "desc", cls: :strings, default: [] of String
+#    expect_raises(ArgumentError) { parser.opt :badi, "desc", cls: :int, default: [] of Int }
+#    expect_raises(ArgumentError) { parser.opt :badf, "desc", cls: :float, default: [] of Float }
+#    expect_raises(ArgumentError) { parser.opt :badd, "desc", cls: :date, default: [] of Date }
+#    expect_raises(ArgumentError) { parser.opt :bads, "desc", cls: :string, default: [] of String }
 #    opts = parser.parse([] of String)
 #    opts[:argmi].should be_empty
 #    opts[:argmf].should be_empty
@@ -313,9 +301,9 @@ describe Optimist::Parser do
     parser.opt :arg2
     parser.opt :arg3
     opts = parser.parse %w(-a -g)
-    opts[:arg].should eq true
-    opts[:arg2].should eq false
-    opts[:arg3].should eq true
+    opts["arg"].value.should eq true
+    opts["arg2"].value.should eq false
+    opts["arg3"].value.should eq true
   end
 
   it "tests_short_autocreation_skips_dashes_and_numbers" do
@@ -326,11 +314,11 @@ describe Optimist::Parser do
     parser.opt :arg_r2d2f  # auto: f (not 2)!
 
     opts = parser.parse %w(-f -d)
-    opts[:arg_daisy].should eq true
-    opts[:arg_r2d2f].should eq true
-    opts[:arg].should eq false
-    opts[:arg_potato].should eq false
-    opts[:arg_muffin].should eq false
+    opts["arg_daisy"].value.should eq true
+    opts["arg_r2d2f"].value.should eq true
+    opts["arg"].value.should eq false
+    opts["arg_potato"].value.should eq false
+    opts["arg_muffin"].value.should eq false
   end
 
   it "tests_short_autocreation_is_ok_with_running_out_of_chars" do
@@ -378,21 +366,21 @@ describe Optimist::Parser do
 
     ## default state
     opts = parser.parse([] of String)
-    opts[:defaultnone].should eq false
-    opts[:defaultfalse].should eq false
-    opts[:defaulttrue].should eq true
+    opts["defaultnone"].value.should eq false
+    opts["defaultfalse"].value.should eq false
+    opts["defaulttrue"].value.should eq true
 
     ## specifying turns them on, regardless of default
     opts = parser.parse %w(--defaultfalse --defaulttrue --defaultnone)
-    opts[:defaultnone].should eq true
-    opts[:defaultfalse].should eq true
-    opts[:defaulttrue].should eq true
+    opts["defaultnone"].value.should eq true
+    opts["defaultfalse"].value.should eq true
+    opts["defaulttrue"].value.should eq true
 
     ## using --no- form turns them off, regardless of default
     opts = parser.parse %w(--no-defaultfalse --no-defaulttrue --no-defaultnone)
-    opts[:defaultnone].should eq false
-    opts[:defaultfalse].should eq false
-    opts[:defaulttrue].should eq false
+    opts["defaultnone"].value.should eq false
+    opts["defaultfalse"].value.should eq false
+    opts["defaulttrue"].value.should eq false
   end
 
   ## note: this behavior has changed in optimist 2.0!
@@ -403,21 +391,21 @@ describe Optimist::Parser do
 
     ## default state
     opts = parser.parse([] of String)
-    opts[:no_default_none].should eq false
-    opts[:no_default_false].should eq false
-    opts[:no_default_true].should eq true
+    opts[:no_default_none].value.should eq false
+    opts[:no_default_false].value.should eq false
+    opts[:no_default_true].value.should eq true
 
     ## specifying turns them all on, regardless of default
     opts = parser.parse %w(--no-default-false --no-default-true --no-default-none)
-    opts[:no_default_none].should eq true
-    opts[:no_default_false].should eq true
-    opts[:no_default_true].should eq true
+    opts[:no_default_none].value.should eq true
+    opts[:no_default_false].value.should eq true
+    opts[:no_default_true].value.should eq true
 
     ## using dropped-no form turns them all off, regardless of default
     opts = parser.parse %w(--default-false --default-true --default-none)
-    opts[:no_default_none].should eq false
-    opts[:no_default_false].should eq false
-    opts[:no_default_true].should eq false
+    opts[:no_default_none].value.should eq false
+    opts[:no_default_false].value.should eq false
+    opts[:no_default_true].value.should eq false
 
     ## disallow double negatives for reasons of sanity preservation
     expect_raises(CommandlineError) { parser.parse %w(--no-no-default-true) }
@@ -426,22 +414,22 @@ describe Optimist::Parser do
   it "tests_short_options_combine" do
     parser.opt :arg1, "desc", short: "a"
     parser.opt :arg2, "desc", short: "b"
-    parser.opt :arg3, "desc", short: "c", type: :int
+    parser.opt :arg3, "desc", short: "c", cls: Int32Opt
 
     opts = parser.parse %w(-a -b)
-    opts[:arg1].should eq true
-    opts[:arg2].should eq true
-    opts[:arg3].should be_nil
+    opts["arg1"].value.should eq true
+    opts["arg2"].value.should eq true
+    opts["arg3"].value.should be_nil
 
     opts = parser.parse %w(-ab)
-    opts[:arg1].should eq true
-    opts[:arg2].should eq true
-    opts[:arg3].should be_nil
+    opts["arg1"].value.should eq true
+    opts["arg2"].value.should eq true
+    opts["arg3"].value.should be_nil
     
     opts = parser.parse %w(-ac 4 -b)
-    opts[:arg1].should eq true
-    opts[:arg2].should eq true
-    opts[:arg3].should eq 4
+    opts["arg1"].value.should eq true
+    opts["arg2"].value.should eq true
+    opts["arg3"].value.should eq 4
 
     expect_raises(CommandlineError) { parser.parse %w(-cab 4) }
     expect_raises(CommandlineError) { parser.parse %w(-cba 4) }
@@ -451,16 +439,18 @@ describe Optimist::Parser do
     parser.opt :arg1, "desc", short: "a", default: 0
     parser.opt :arg2, "desc", short: "b", default: 0
     opts = parser.parse %w(-- -a 3 -b 2)
-    0.should eq opts[:arg1]
-    0.should eq opts[:arg2]
+    opts["arg1"].value.should eq 0
+    opts["arg2"].value.should eq 0
     parser.leftovers.should eq %w(-a 3 -b 2)
+
     opts = parser.parse %w(-a 3 -- -b 2)
-    3.should eq opts[:arg1]
-    0.should eq opts[:arg2]
+    opts["arg1"].value.should eq 3
+    opts["arg2"].value.should eq 0
     parser.leftovers.should eq %w(-b 2)
+
     opts = parser.parse %w(-a 3 -b 2 --)
-    3.should eq opts[:arg1]
-    2.should eq opts[:arg2]
+    opts["arg1"].value.should eq 3
+    opts["arg2"].value.should eq 2
     parser.leftovers.should eq %w()
   end
 
@@ -477,7 +467,7 @@ Test is an awesome program that does something very, very important.
 
 Usage:
   test [options] <filenames>+
-where [options] are:"
+where [options] are:
 EOM
     output.should eq [
       "Test is an awesome program that does something very, very important.",
@@ -490,7 +480,7 @@ EOM
   it "tests_multi_line_description" do
     strio = IO::Memory.new
 
-    parser.opt :arg, <<-EOM, type: :int
+    parser.opt :arg, <<-EOM, cls: Int32Opt
     This is an arg
     with a multi-line description
     EOM
@@ -505,37 +495,37 @@ EOM
   end
 
   it "tests_integer_formatting" do
-    parser.opt :arg, "desc", type: :integer, short: "i"
+    parser.opt :arg, "desc", cls: Int32Opt, short: "i"
     opts = parser.parse %w(-i 5)
-    opts[:arg].should eq 5
+    opts["arg"].value.should eq 5
   end
 
   it "tests_integer_formatting_default" do
-    parser.opt :arg, "desc", type: :integer, short: "i", default: 3
+    parser.opt :arg, "desc", cls: Int32Opt, short: "i", default: 3
     opts = parser.parse %w(-i)
-    opts[:arg].should eq 3
+    opts["arg"].value.should eq 3
   end
 
   it "tests_floating_point_formatting" do
-    parser.opt :arg, "desc", type: :float, short: "f"
+    parser.opt :arg, "desc", cls: Float64Opt, short: "f"
     opts = parser.parse %w(-f 1)
-    opts[:arg].should eq 1.0
+    opts["arg"].value.should eq 1.0
     opts = parser.parse %w(-f 1.0)
-    opts[:arg].should eq 1.0
+    opts["arg"].value.should eq 1.0
     opts = parser.parse %w(-f 0.1)
-    opts[:arg].should eq 0.1
+    opts["arg"].value.should eq 0.1
     opts = parser.parse %w(-f .1)
-    opts[:arg].should eq 0.1
+    opts["arg"].value.should eq 0.1
     opts = parser.parse %w(-f .99999999999999999999)
-    opts[:arg].should eq 1.0
+    opts["arg"].value.should eq 1.0
     opts = parser.parse %w(-f -1)
-    opts[:arg].should eq -1.0
+    opts["arg"].value.should eq -1.0
     opts = parser.parse %w(-f -1.0)
-    opts[:arg].should eq -1.0
+    opts["arg"].value.should eq -1.0
     opts = parser.parse %w(-f -0.1)
-    opts[:arg].should eq -0.1
+    opts["arg"].value.should eq -0.1
     opts = parser.parse %w(-f -.1)
-    opts[:arg].should eq -0.1
+    opts["arg"].value.should eq -0.1
     expect_raises(CommandlineError) { parser.parse %w(-f a) }
     expect_raises(CommandlineError) { parser.parse %w(-f 1a) }
     expect_raises(CommandlineError) { parser.parse %w(-f 1.a) }
@@ -546,15 +536,15 @@ EOM
   end
 
   it "tests_floating_point_formatting_default" do
-    parser.opt :arg, "desc", type: :float, short: "f", default: 5.5
+    parser.opt :arg, "desc", cls: Float64Opt, short: "f", default: 5.5
     opts = parser.parse %w(-f)
-    opts[:arg].should eq 5.5
+    opts["arg"].value.should eq 5.5
   end
 
 #  it "tests_date_formatting" do
-#    parser.opt :arg, "desc", type: :date, short: "d"
+#    parser.opt :arg, "desc", cls: :date, short: "d"
 #    opts = parser.parse(["-d", "Jan 4, 2007"])
-#    opts[:arg].should eq Date.civil(2007, 1, 4)
+#    opts["arg"].value.should eq Date.civil(2007, 1, 4)
 #  end
 
   it "tests_short_options_cant_be_numeric" do
@@ -564,8 +554,8 @@ EOM
     parser.parse([] of String)
     # testing private interface to ensure default
     # short options did not become numeric
-    "a".should eq parser.specs[:a1b].short.chars.first
-    "b".should eq parser.specs[:a2b].short.chars.first
+    parser.specs["a1b"].short.chars.first.should eq "a"
+    parser.specs["a2b"].short.chars.first.should eq "b"
   end
 
   it "tests_short_options_can_be_weird" do
@@ -589,57 +579,57 @@ EOM
   end
 
   it "tests_short_options_with_multiple_options" do
-    parser.opt :xarg, "desc", short: "-x", type: String, multi: true
+    parser.opt :xarg, "desc", short: "-x", cls: StringOpt, multi: true
     opts = parser.parse %w(-x a -x b)
-    opts[:xarg].should eq %w(a b)
+    opts["xarg"].value.should eq %w(a b)
     parser.leftovers.should be_empty
   end
 
   it "tests_short_options_with_multiple_options_does_not_affect_flags_type" do
-    parser.opt :xarg, "desc", short: "-x", type: :flag, multi: true
+    parser.opt :xarg, "desc", short: "-x", cls: BoolOpt, multi: true
 
     opts = parser.parse %w(-x a)
-    opts[:xarg].should eq true
+    opts["xarg"].value.should eq true
     parser.leftovers.should eq %w(a)
 
     opts = parser.parse %w(-x a -x b)
-    opts[:xarg].should eq true
+    opts["xarg"].value.should eq true
     parser.leftovers.should eq %w(a b)
 
     opts = parser.parse %w(-xx a -x b)
-    opts[:xarg].should eq true
+    opts["xarg"].value.should eq true
     parser.leftovers.should eq %w(a b)
   end
 
   it "tests_short_options_with_multiple_arguments" do
-    parser.opt :xarg, "desc", type: :ints
+    parser.opt :xarg, "desc", cls: Int32Opt
     opts = parser.parse %w(-x 3 4 0)
-    opts[:xarg].should eq [3, 4, 0]
+    opts["xarg"].value.should eq [3, 4, 0]
     parser.leftovers.should be_empty
 
-    parser.opt :yarg, "desc", type: :floats
+    parser.opt :yarg, "desc", cls: Float64Opt
     opts = parser.parse %w(-y 3.14 4.21 0.66)
-    opts[:yarg].should eq [3.14, 4.21, 0.66]
+    opts["yarg"].value.should eq [3.14, 4.21, 0.66]
     parser.leftovers.should be_empty
 
-    parser.opt :zarg, "desc", type: :strings
+    parser.opt :zarg, "desc", cls: StringArrayOpt
     opts = parser.parse %w(-z a b c)
     opts[:zarg].should eq %w(a b c)
     parser.leftovers.should be_empty
   end
 
   it "tests_short_options_with_multiple_options_and_arguments" do
-    parser.opt :xarg, "desc", type: :ints, multi: true
+    parser.opt :xarg, "desc", cls: Int32ArrayOpt
     opts = parser.parse %w(-x 3 4 5 -x 6 7)
-    opts[:xarg].should eq [[3, 4, 5], [6, 7]]
+    opts["xarg"].value.should eq [[3, 4, 5], [6, 7]]
     parser.leftovers.should be_empty
 
-    parser.opt :yarg, "desc", type: :floats, multi: true
+    parser.opt :yarg, "desc", cls: Float64ArrayOpt
     opts = parser.parse %w(-y 3.14 4.21 5.66 -y 6.99 7.01)
-    opts[:yarg].should eq [[3.14, 4.21, 5.66], [6.99, 7.01]]
+    opts["yarg"].value.should eq [[3.14, 4.21, 5.66], [6.99, 7.01]]
     parser.leftovers.should be_empty
 
-    parser.opt :zarg, "desc", type: :strings, multi: true
+    parser.opt :zarg, "desc", cls: StringArrayOpt
     opts = parser.parse %w(-z a b c -z d e)
     opts[:zarg].should eq [%w(a b c), %w(d e)]
     parser.leftovers.should be_empty
@@ -648,51 +638,51 @@ EOM
   it "tests_combined_short_options_with_multiple_arguments" do
     parser.opt :arg1, "desc", short: "a"
     parser.opt :arg2, "desc", short: "b"
-    parser.opt :arg3, "desc", short: "c", type: :ints
-    parser.opt :arg4, "desc", short: "d", type: :floats
+    parser.opt :arg3, "desc", short: "c", cls: Int32ArrayOpt
+    parser.opt :arg4, "desc", short: "d", cls: Float64ArrayOpt
 
     opts = parser.parse %w(-abc 4 6 9)
-    opts[:arg1].should eq true
-    opts[:arg2].should eq true
-    opts[:arg3].should eq [4, 6, 9]
+    opts["arg1"].value.should eq true
+    opts["arg2"].value.should eq true
+    opts["arg3"].value.should eq [4, 6, 9]
 
     opts = parser.parse %w(-ac 4 6 9 -bd 3.14 2.41)
-    opts[:arg1].should eq true
-    opts[:arg2].should eq true
-    opts[:arg3].should eq [4, 6, 9]
+    opts["arg1"].value.should eq true
+    opts["arg2"].value.should eq true
+    opts["arg3"].value.should eq [4, 6, 9]
     opts[:arg4].should eq [3.14, 2.41]
 
     expect_raises(CommandlineError) { opts = parser.parse %w(-abcd 3.14 2.41) }
   end
 
   it "tests_long_options_with_multiple_options" do
-    parser.opt :xarg, "desc", type: String, multi: true
+    parser.opt :xarg, "desc", cls: StringOpt, multi: true
     opts = parser.parse %w(--xarg=a --xarg=b)
-    opts[:xarg].should eq %w(a b)
+    opts["xarg"].value.should eq %w(a b)
     parser.leftovers.should be_empty
     opts = parser.parse %w(--xarg a --xarg b)
-    opts[:xarg].should eq %w(a b)
+    opts["xarg"].value.should eq %w(a b)
     parser.leftovers.should be_empty
   end
 
   it "tests_long_options_with_multiple_arguments" do
-    parser.opt :xarg, "desc", type: :ints
+    parser.opt :xarg, "desc", cls: Int32ArrayOpt
     opts = parser.parse %w(--xarg 3 2 5)
-    opts[:xarg].should eq [3, 2, 5]
+    opts["xarg"].value.should eq [3, 2, 5]
     parser.leftovers.should be_empty
     opts = parser.parse %w(--xarg=3)
-    opts[:xarg].should eq [3]
+    opts["xarg"].value.should eq [3]
     parser.leftovers.should be_empty
 
-    parser.opt :yarg, "desc", type: :floats
+    parser.opt :yarg, "desc", cls: Float64ArrayOpt
     opts = parser.parse %w(--yarg 3.14 2.41 5.66)
-    opts[:yarg].should eq [3.14, 2.41, 5.66]
+    opts["yarg"].value.should eq [3.14, 2.41, 5.66]
     parser.leftovers.should be_empty
     opts = parser.parse %w(--yarg=3.14)
-    opts[:yarg].should eq [3.14]
+    opts["yarg"].value.should eq [3.14]
     parser.leftovers.should be_empty
 
-    parser.opt :zarg, "desc", type: :strings
+    parser.opt :zarg, "desc", cls: StringArrayOpt
     opts = parser.parse %w(--zarg a b c)
     opts[:zarg].should eq %w(a b c)
     parser.leftovers.should be_empty
@@ -702,23 +692,23 @@ EOM
   end
 
   it "tests_long_options_with_multiple_options_and_arguments" do
-    parser.opt :xarg, "desc", type: :ints, multi: true
+    parser.opt :xarg, "desc", cls: Int32ArrayOpt
     opts = parser.parse %w(--xarg 3 2 5 --xarg 2 1)
-    opts[:xarg].should eq [[3, 2, 5], [2, 1]]
+    opts["xarg"].value.should eq [[3, 2, 5], [2, 1]]
     parser.leftovers.should be_empty
     opts = parser.parse %w(--xarg=3 --xarg=2)
-    opts[:xarg].should eq [[3], [2]]
+    opts["xarg"].value.should eq [[3], [2]]
     parser.leftovers.should be_empty
 
-    parser.opt :yarg, "desc", type: :floats, multi: true
+    parser.opt :yarg, "desc", cls: Float64ArrayOpt
     opts = parser.parse %w(--yarg 3.14 2.72 5 --yarg 2.41 1.41)
-    opts[:yarg].should eq [[3.14, 2.72, 5], [2.41, 1.41]]
+    opts["yarg"].value.should eq [[3.14, 2.72, 5], [2.41, 1.41]]
     parser.leftovers.should be_empty
     opts = parser.parse %w(--yarg=3.14 --yarg=2.41)
-    opts[:yarg].should eq [[3.14], [2.41]]
+    opts["yarg"].value.should eq [[3.14], [2.41]]
     parser.leftovers.should be_empty
 
-    parser.opt :zarg, "desc", type: :strings, multi: true
+    parser.opt :zarg, "desc", cls: StringArrayOpt
     opts = parser.parse %w(--zarg a b c --zarg d e)
     opts[:zarg].should eq [%w(a b c), %w(d e)]
     parser.leftovers.should be_empty
@@ -728,13 +718,13 @@ EOM
   end
 
   it "tests_long_options_also_take_equals" do
-    parser.opt :arg, "desc", long: "arg", type: String, default: "hello"
+    parser.opt :arg, "desc", long: "arg", cls: StringOpt, default: "hello"
     opts = parser.parse %w()
-    opts[:arg].should eq "hello"
+    opts["arg"].value.should eq "hello"
     opts = parser.parse %w(--arg goat)
-    opts[:arg].should eq "goat"
+    opts["arg"].value.should eq "goat"
     opts = parser.parse %w(--arg=goat)
-    opts[:arg].should eq "goat"
+    opts["arg"].value.should eq "goat"
     ## actually, this next one is valid. empty string for --arg, and goat as a
     ## leftover.
     ## expect_raises(CommandlineError) { opts = parser.parse %w(--arg= goat) }
@@ -742,7 +732,7 @@ EOM
 
   it "tests_auto_generated_long_names_convert_underscores_to_hyphens" do
     parser.opt :hello_there
-    parser.specs[:hello_there].long.long.should eq "hello-there"
+    parser.specs["hello_there"].long.long.should eq "hello-there"
   end
 
 #  it "tests_arguments_passed_through_block" do
@@ -769,7 +759,7 @@ EOM
 
 
   it "tests_version_and_help_override_errors" do
-    parser.opt :asdf, "desc", type: String
+    parser.opt :asdf, "desc", cls: StringOpt
     parser.version = "version"
     parser.parse %w(--asdf goat)
     expect_raises(CommandlineError) { parser.parse %w(--asdf) }
@@ -872,14 +862,14 @@ EOM
     parser.stop_on %w(happy sad)
 
     opts = parser.parse %w(--arg1 happy --arg2)
-    opts[:arg1].should eq true
-    opts[:arg2].should eq false
+    opts["arg1"].value.should eq true
+    opts["arg2"].value.should eq false
 
     ## restart parsing
     parser.leftovers.shift
     opts = parser.parse parser.leftovers
-    opts[:arg1].should eq false
-    opts[:arg2].should eq true
+    opts["arg1"].value.should eq false
+    opts["arg2"].value.should eq true
   end
 
   it "tests_stopwords_no_stopwords" do
@@ -888,14 +878,14 @@ EOM
     parser.stop_on %w(happy sad)
 
     opts = parser.parse %w(--arg1 --arg2)
-    opts[:arg1].should eq true
-    opts[:arg2].should eq true
+    opts["arg1"].value.should eq true
+    opts["arg2"].value.should eq true
 
     ## restart parsing
     parser.leftovers.shift
     opts = parser.parse parser.leftovers
-    opts[:arg1].should eq false
-    opts[:arg2].should eq false
+    opts["arg1"].value.should eq false
+    opts["arg2"].value.should eq false
   end
 
   it "tests_stopwords_multiple_stopwords" do
@@ -904,20 +894,20 @@ EOM
     parser.stop_on %w(happy sad)
 
     opts = parser.parse %w(happy sad --arg1 --arg2)
-    opts[:arg1].should eq false
-    opts[:arg2].should eq false
+    opts["arg1"].value.should eq false
+    opts["arg2"].value.should eq false
 
     ## restart parsing
     parser.leftovers.shift
     opts = parser.parse parser.leftovers
-    opts[:arg1].should eq false
-    opts[:arg2].should eq false
+    opts["arg1"].value.should eq false
+    opts["arg2"].value.should eq false
 
     ## restart parsing again
     parser.leftovers.shift
     opts = parser.parse parser.leftovers
-    opts[:arg1].should eq true
-    opts[:arg2].should eq true
+    opts["arg1"].value.should eq true
+    opts["arg2"].value.should eq true
   end
 
   it "tests_stopwords_with_short_args" do
@@ -931,18 +921,18 @@ EOM
     qqq.opt :cmd_option, "This is an option only for the subcommand", short: "-c"
     cmd_opts = qqq.parse parser.leftovers
 
-    global_opts[:global_option].should eq true
-    global_opts[:cmd_option].should be_nil
+    global_opts["global_option"].value.should eq true
+    global_opts["cmd_option"]?.should be_nil
 
-    cmd_opts[:cmd_option].should eq true
-    cmd_opts[:global_option].should be_nil
+    cmd_opts["cmd_option"].value.should eq true
+    cmd_opts["global_option"]?.should be_nil
 
-    "sub-command-1".should eq cmd
+    cmd.should eq "sub-command-1"
     qqq.leftovers.should be_empty
   end
 
   pending "tests_unknown_subcommand" do
-    parser.opt :global_flag, "Global flag", short: "-g", type: :flag
+    parser.opt :global_flag, "Global flag", short: "-g", cls: BoolOpt
     parser.opt :global_param, "Global parameter", short: "-p", default: 5
     parser.stop_on_unknown
 
@@ -972,139 +962,110 @@ EOM
       opt :gamow, "George Gamow", short: "-c"
     end
 
-    physicists_with_humor = [:alpher, :bethe, :gamow]
+    physicists_with_humor = ["alpher", "bethe", "gamow"]
     physicists_with_humor.each do |physicist|
-      opts[physicist].should eq true
-    end
-  end
-
-#  it "tests_date_arg_type" do
-#    temp = Date.new
-#    parser.opt :arg, "desc", type: :date
-#    parser.opt :arg2, "desc", type: Date
-#    parser.opt :arg3, "desc", default: temp
-#
-#    opts = parser.parse([] of String)
-#    opts[:arg3].should eq temp
-#
-#    opts = parser.parse %w(--arg 2010/05/01)
-#    opts[:arg].should be_a Date
-#    opts[:arg].should eq Date.new(2010, 5, 1)
-#
-#    opts = parser.parse %w(--arg2 2010/9/13)
-#    opts[:arg2].should be_a Date
-#    opts[:arg2].should eq Date.new(2010, 9, 13)
-#
-#    opts = parser.parse %w(--arg3)
-#    opts[:arg3].should eq temp
-#  end
-
-  it "tests_unknown_arg_class_type" do
-    expect_raises ArgumentError do
-      parser.opt :arg, "desc", type: Hash
+      opts[physicist].value.should eq true
     end
   end
 
   it "tests_io_arg_type" do
-    parser.opt :arg, "desc", type: IOOption
-    parser.opt :arg2, "desc", type: IOOption
+    parser.opt :arg, "desc", cls: FileOpt
+    parser.opt :arg2, "desc", cls: FileOpt
     parser.opt :arg3, "desc", default: STDOUT
 
     opts = parser.parse([] of String)
-    opts[:arg3].should eq STDOUT
+    opts["arg3"].value.should eq STDOUT
 
     opts = parser.parse %w(--arg /dev/null)
-    opts[:arg].should be_a File
+    opts["arg"].value.should be_a File
 
-    #TODO opts[:arg].path.should eq "/dev/null"
+    #TODO opts["arg"].path.should eq "/dev/null"
 
     #TODO: move to mocks
     #opts = parser.parse %w(--arg2 http://google.com/)
-    #assert_kind_of StringIO, opts[:arg2]
+    #assert_kind_of StringIO, opts["arg2"].value
 
     opts = parser.parse %w(--arg3 stdin)
-    opts[:arg3].should eq STDIN
+    opts["arg3"].value.should eq STDIN
 
     expect_raises(CommandlineError) { opts = parser.parse %w(--arg /fdasfasef/fessafef/asdfasdfa/fesasf) }
   end
-
-#  it "tests_openstruct_style_access" do
-#    parser.opt :arg1, "desc", type: :int
-#    parser.opt :arg2, "desc", type: :int
-#
-#    opts = parser.parse(%w(--arg1 3 --arg2 4))
-#
-#    opts.arg1
-#    opts.arg2
-#    opts.arg1.should eq 3
-#    opts.arg2.should eq 4
-#  end
 
   it "tests_multi_args_autobox_defaults" do
     parser.opt :arg1, "desc", default: "hello", multi: true
     parser.opt :arg2, "desc", default: ["hello"], multi: true
 
     opts = parser.parse([] of String)
-    opts[:arg1].should eq ["hello"]
-    opts[:arg2].should eq ["hello"]
+    opts["arg1"].value.should eq ["hello"]
+    opts["arg2"].value.should eq ["hello"]
 
     opts = parser.parse %w(--arg1 hello)
-    opts[:arg1].should eq ["hello"]
-    opts[:arg2].should eq ["hello"]
+    opts["arg1"].value.should eq ["hello"]
+    opts["arg2"].value.should eq ["hello"]
 
     opts = parser.parse %w(--arg1 hello --arg1 there)
-    opts[:arg1].should eq ["hello", "there"]
+    opts["arg1"].value.should eq ["hello", "there"]
   end
 
   it "tests_ambigious_multi_plus_array_default_resolved_as_specified_by_documentation" do
     parser.opt :arg1, "desc", default: ["potato"], multi: true
-    parser.opt :arg2, "desc", default: ["potato"], multi: true, type: :strings
+    parser.opt :arg2, "desc", default: ["potato"], multi: true, cls: StringArrayOpt
     parser.opt :arg3, "desc", default: ["potato"]
     parser.opt :arg4, "desc", default: ["potato", "rhubarb"], short: false, multi: true
 
     ## arg1 should be multi-occurring but not multi-valued
     opts = parser.parse %w(--arg1 one two)
-    opts[:arg1].should eq ["one"]
+    opts["arg1"].value.should eq ["one"]
     parser.leftovers.should eq ["two"]
 
     opts = parser.parse %w(--arg1 one --arg1 two)
-    opts[:arg1].should eq ["one", "two"]
+    opts["arg1"].value.should eq ["one", "two"]
     parser.leftovers.should be_empty
 
     ## arg2 should be multi-valued and multi-occurring
     opts = parser.parse %w(--arg2 one two)
-    opts[:arg2].should eq [["one", "two"]]
+    opts["arg2"].value.should eq [["one", "two"]]
     parser.leftovers.should be_empty
 
     ## arg3 should be multi-valued but not multi-occurring
     opts = parser.parse %w(--arg3 one two)
-    opts[:arg3].should eq ["one", "two"]
+    opts["arg3"].value.should eq ["one", "two"]
     parser.leftovers.should be_empty
 
     ## arg4 should be multi-valued but not multi-occurring
     opts = parser.parse %w()
-    opts[:arg4].should eq ["potato", "rhubarb"]
+    opts["arg4"].value.should eq ["potato", "rhubarb"]
   end
 
-  it "tests_given_keys" do
-    parser.opt :arg1
-    parser.opt :arg2
-
-    opts = parser.parse %w(--arg1)
-    opts[:arg1_given].should eq true
-    opts[:arg2_given].should eq nil
-
-    opts = parser.parse %w(--arg2)
-    opts[:arg1_given].should eq nil
-    opts[:arg2_given].should eq true
-
-    opts = parser.parse([] of String)
-    opts[:arg1_given].should eq nil
-    opts[:arg2_given].should eq nil
-
-    opts = parser.parse %w(--arg1 --arg2)
-    opts[:arg1_given].should eq true
-    opts[:arg2_given].should eq true
+  describe "given" do
+    it "sets given for arg1 only" do
+      parser.opt :arg1
+      parser.opt :arg2
+      opts = parser.parse %w(--arg1)
+      opts["arg1"].given?.should eq true
+      opts["arg2"].given?.should eq false
+    end
+    it "sets given for arg2 only" do
+      parser.opt :arg1
+      parser.opt :arg2
+      opts = parser.parse %w(--arg2)
+      opts["arg1"].given?.should eq false
+      opts["arg2"].given?.should eq true
+    end
+    it "sets given for neither opt" do
+      parser.opt :arg1
+      parser.opt :arg2
+      opts = parser.parse([] of String)
+      opts["arg1"].given?.should eq false
+      opts["arg2"].given?.should eq false
+    end
+    it "sets given for both opts" do
+      parser.opt :arg1
+      parser.opt :arg2
+      opts = parser.parse %w(--arg1 --arg2)
+      opts["arg1"].given?.should eq true
+      opts["arg2"].given?.should eq true
+    end
   end
 
   it "tests_default_shorts_assigned_only_after_user_shorts" do
@@ -1114,16 +1075,16 @@ EOM
     parser.opt :user2, "user2", short: 'c'
 
     opts = parser.parse %w(-a -b)
-    opts[:user1].should eq true
-    opts[:user2].should eq false
-    opts[:aab].should eq true
-    opts[:ccd].should eq false
+    opts["user1"].value.should eq true
+    opts["user2"].value.should eq false
+    opts["aab"].value.should eq true
+    opts["ccd"].value.should eq false
 
     opts = parser.parse %w(-c -d)
-    opts[:user1].should eq false
-    opts[:user2].should eq true
-    opts[:aab].should eq false
-    opts[:ccd].should eq true
+    opts["user1"].value.should eq false
+    opts["user2"].value.should eq true
+    opts["aab"].value.should eq false
+    opts["ccd"].value.should eq true
   end
 
   it "tests_short_opts_not_implicitly_created" do
@@ -1134,40 +1095,40 @@ EOM
       newp.parse %w(-u)
     end
     opts = newp.parse %w(--user1)
-    opts[:user1].should eq true
+    opts["user1"].value.should eq true
     opts = newp.parse %w(-b)
-    opts[:bag].should eq true
+    opts["bag"].value.should eq true
   end
 
   it "tests_inexact_match" do
     newp = Parser.new()
-    newp.opt :liberation, "liberate something", type: :int
-    newp.opt :evaluate, "evaluate something", type: :string
+    newp.opt :liberation, "liberate something", cls: Int32Opt
+    newp.opt :evaluate, "evaluate something", cls: StringOpt
     opts = newp.parse %w(--lib 5 --ev bar)
-    opts[:liberation].should eq 5
-    opts[:evaluate].should eq "bar"
-    opts[:eval].should be_nil
+    opts["liberation"].value.should eq 5
+    opts["evaluate"].value.should eq "bar"
+    opts["eval"]?.should be_nil
   end
   
   it "tests_exact_match" do
     newp = Parser.new(exact_match: true)
-    newp.opt :liberation, "liberate something", type: :int
-    newp.opt :evaluate, "evaluate something", type: :string
-    expect_raises(CommandlineError, /unknown argument '--lib'/) do
+    newp.opt :liberation, "liberate something", cls: Int32Opt
+    newp.opt :evaluate, "evaluate something", cls: StringOpt
+    expect_raises(CommandlineError, /Unknown argument '--lib'/) do
       newp.parse %w(--lib 5)
     end
-    expect_raises(CommandlineError, /unknown argument '--ev'/) do
+    expect_raises(CommandlineError, /Unknown argument '--ev'/) do
       newp.parse %w(--ev bar)
     end
   end
 
   it "tests_inexact_collision" do
     newp = Parser.new()
-    newp.opt :bookname, "name of a book", type: :string
-    newp.opt :bookcost, "cost of the book", type: :string
+    newp.opt :bookname, "name of a book", cls: StringOpt
+    newp.opt :bookcost, "cost of the book", cls: StringOpt
     opts = newp.parse %w(--bookn hairy_potsworth --bookc 10)
-    opts[:bookname].should eq "hairy_potsworth"
-    opts[:bookcost].should eq "10"
+    opts["bookname"].value.should eq "hairy_potsworth"
+    opts["bookcost"].value.should eq "10"
     expect_raises(CommandlineError) do
       newp.parse %w(--book 5) # ambiguous
     end
@@ -1179,29 +1140,29 @@ EOM
 
   it "tests_inexact_collision_with_exact" do
     newp = Parser.new(exact_match: false)
-    newp.opt :book, "name of a book", type: :string, default: "ABC"
-    newp.opt :bookcost, "cost of the book", type: :int, default: 5
+    newp.opt :book, "name of a book", cls: StringOpt, default: "ABC"
+    newp.opt :bookcost, "cost of the book", cls: Int32Opt, default: 5
     opts = newp.parse %w(--book warthog --bookc 3)
-    opts[:book].should eq "warthog"
-    opts[:bookcost].should eq 3
+    opts["book"].value.should eq "warthog"
+    opts["bookcost"].value.should eq 3
 
   end
 
   it "tests_accepts_arguments_with_spaces" do
-    parser.opt :arg1, "arg", type: String
-    parser.opt :arg2, "arg2", type: String
+    parser.opt :arg1, "arg", cls: StringOpt
+    parser.opt :arg2, "arg2", cls: StringOpt
 
     opts = parser.parse ["--arg1", "hello there", "--arg2=hello there"]
-    opts[:arg1].should eq "hello there"
-    opts[:arg2].should eq "hello there"
+    opts["arg1"].value.should eq "hello there"
+    opts["arg2"].value.should eq "hello there"
     parser.leftovers.size.should eq 0
   end
 
-  it "tests_multi_args_default_to_empty_array" do
-    parser.opt :arg1, "arg", multi: true
-    opts = parser.parse([] of String)
-    opts[:arg1].should be_empty
-  end
+#  it "tests_multi_args_default_to_empty_array" do
+#    parser.opt :arg1, "arg", multi: true
+#    opts = parser.parse([] of String)
+#    opts["arg1"].value.should be_empty
+#  end
 
   pending "tests_simple_interface_handles_help" do
     assert_stdout(/Options:/) do
@@ -1240,7 +1201,7 @@ EOM
     opts = ::Optimist.options(%w(--potato)) do
       opt :potato
     end
-    opts[:potato].should eq true
+    opts["potato"].value.should eq true
   end
 
   pending "tests_simple_interface_handles_die" do
@@ -1294,53 +1255,53 @@ EOM
   end
 
   it "tests_ignore_invalid_options" do
-    parser.opt :arg1, "desc", type: String
-    parser.opt :b, "desc", type: String
-    parser.opt :c, "desc", type: :flag
-    parser.opt :d, "desc", type: :flag
+    parser.opt :arg1, "desc", cls: StringOpt
+    parser.opt :b, "desc", cls: StringOpt
+    parser.opt :c, "desc", cls: BoolOpt
+    parser.opt :d, "desc", cls: BoolOpt
     parser.ignore_invalid_options = true
     opts = parser.parse %w{unknown -S param --arg1 potato -fb daisy --foo -ecg --bar baz -z}
-    opts[:arg1].should eq "potato"
-    opts[:b].should eq "daisy"
-    opts[:c].should eq true
-    opts[:d].should eq false
+    opts["arg1"].value.should eq "potato"
+    opts["b"].value.should eq "daisy"
+    opts["c"].value.should eq true
+    opts["d"].value.should eq false
     parser.leftovers.should eq %w{unknown -S param -f --foo -eg --bar baz -z}
   end
 
   it "tests_ignore_invalid_options_stop_on_unknown_long" do
-    parser.opt :arg1, "desc", type: String
+    parser.opt :arg1, "desc", cls: StringOpt
     parser.ignore_invalid_options = true
     parser.stop_on_unknown
     opts = parser.parse %w{--unk --arg1 potato}
     
-    opts[:arg1].should be_nil
+    opts["arg1"].value.should be_nil
     parser.leftovers.should eq %w{--unk --arg1 potato}
   end
 
   it "tests_ignore_invalid_options_stop_on_unknown_short" do
-    parser.opt :arg1, "desc", type: String
+    parser.opt :arg1, "desc", cls: StringOpt
     parser.ignore_invalid_options = true
     parser.stop_on_unknown
     opts = parser.parse %w{-ua potato}
-    opts[:arg1].should be_nil
+    opts["arg1"].value.should be_nil
     parser.leftovers.should eq %w{-ua potato}
   end
 
   it "tests_ignore_invalid_options_stop_on_unknown_partial_end_short" do
-    parser.opt :arg1, "desc", type: :flag
+    parser.opt :arg1, "desc", cls: BoolOpt
     parser.ignore_invalid_options = true
     parser.stop_on_unknown
     opts = parser.parse %w{-au potato}
-    opts[:arg1].should eq true
+    opts["arg1"].value.should eq true
     parser.leftovers.should eq %w{-u potato}
   end
 
   it "tests_ignore_invalid_options_stop_on_unknown_partial_mid_short" do
-    parser.opt :arg1, "desc", type: :flag
+    parser.opt :arg1, "desc", cls: BoolOpt
     parser.ignore_invalid_options = true
     parser.stop_on_unknown
     opts = parser.parse %w{-abu potato}
-    opts[:arg1].should eq true
+    opts["arg1"].value.should eq true
     parser.leftovers.should eq %w{-bu potato}
   end
 

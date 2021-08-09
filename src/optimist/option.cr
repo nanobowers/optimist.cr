@@ -1,5 +1,5 @@
 module Optimist
-
+  
   abstract class Option
 
     abstract def default
@@ -8,10 +8,12 @@ module Optimist
         
     getter :short
     property :name, :long, :permitted, :permitted_response
-
+    property :callback, :desc
+    property? :required
+    getter? :given
+    
     # defaults
     @name : String
-    #@default : T?
     @permitted : PermittedType
     @callback : Proc(String,String)?
     @desc : String
@@ -25,7 +27,6 @@ module Optimist
       @callback = nil
       @name = "__unknown__"
       @desc = ""
-      #@multi_given = false
       @hidden = false
       @default = default
       @permitted = nil
@@ -41,17 +42,15 @@ module Optimist
       @given = false
     end
 
-    def multi ; false ; end
+    def needs_an_argument ; true ; end # flag-like options do not need arguments
+    def takes_an_argument ; true ; end # flag-only options do not take an argument
+    def multi ; false ; end # can take many arguments.. TODO: REMOVE
 
-    # Check that an option is compatible with another option.
-    # By default, checking that they are the same class, but we
-    # can override this in the subclass as needed.
-    def compatible_with?(other_option)
-      typeof(self) == typeof(other_option)
+    def disallow_multiple_args(paramlist : Array(String))
+      if self.given? || paramlist.size > 1
+        raise CommandlineError.new("Option '#{self.name}' cannot be given more than once")
+      end
     end
-
-    #def multi ; @multi_given ; end
-
 
     getter :min_args, :max_args
     # |@min_args | @max_args |
@@ -61,14 +60,9 @@ module Optimist
     # | 1        | >1        | formerly multi_arg?==true 
     # | ?        | ?         | presumably illegal condition. untested.
     
-    #kill# def array_default? ; self.default.is_a?(Array) ; end
-
     ## TODO: push into SHORT
     def doesnt_need_autogen_short ; !short.auto || !short.chars.empty? ; end
 
-    property :callback, :desc
-    
-    getter? :required
 
     # provide type-format string.  default to empty, but user should probably override it
     def type_format ; "" ; end
@@ -84,7 +78,6 @@ module Optimist
     def full_description
       desc_str = desc
       desc_str = description_with_default desc_str if default
-      #TODO
       desc_str = description_with_permitted desc_str if permitted
       desc_str
     end
@@ -102,11 +95,6 @@ module Optimist
     ## Format the educate-line description including the default-value(s)
     def description_with_default(str)
       return str unless default
-      #OLD# default_s = if default.is_a?(Array)
-      #OLD#              default.join(", ")
-      #OLD#            else
-      #OLD#              format_stdio(default).to_s
-      #OLD#            end
       default_s = default.inspect
       return "#{str} (Default: #{default_s})"
     end
@@ -190,20 +178,20 @@ module Optimist
                     **opts)
 
       if cls.is_a?(Nil)
-        if default.is_a?(Int)
-          opt_inst = IntOption.new(name, desc, default)
+        if default.is_a?(Int32)
+          opt_inst = Int32Opt.new(name, desc, default)
         elsif default.is_a?(Bool)
-          opt_inst = BooleanOption.new(name, desc, default)
+          opt_inst = BoolOpt.new(name, desc, default)
         elsif default.is_a?(String)
-          opt_inst = StringOption.new(name, desc, default)
+          opt_inst = StringOpt.new(name, desc, default)
         elsif default.is_a?(Array(String))
-          opt_inst = StringArrayOption.new(name, desc, default)
+          opt_inst = StringArrayOpt.new(name, desc, default)
         elsif default.is_a?(Float)
-          opt_inst = FloatOption.new(name, desc, default)
+          opt_inst = Float64Opt.new(name, desc, default)
         elsif default.is_a?(IO::FileDescriptor)
-          opt_inst = IOOption.new(name, desc, default)
+          opt_inst = FileOpt.new(name, desc, default)
         else # nil??
-          opt_inst = BooleanOption.new(name, desc, default)
+          opt_inst = BoolOpt.new(name, desc, default)
           default = false
         end
       else
@@ -217,7 +205,8 @@ module Optimist
       opt_inst.permitted = permitted
       opt_inst.permitted_response = permitted_response if permitted_response
       opt_inst.name = name
-
+      opt_inst.required = required
+      
       return opt_inst # some sort of Option
     end
 
@@ -251,7 +240,7 @@ module Optimist
   ################################################
   
   # Flag option.  Has no arguments. Can be negated with "no-".
-  class BooleanOption < Option
+  class BoolOpt < Option
     @value : Bool?
     @default : Bool?
     getter :value, :default
@@ -267,11 +256,14 @@ module Optimist
       @value = (self.name.to_s =~ /^no_/) ? neg_given : !neg_given
       @given = true
     end
-    def multi : Bool ; false ; end
+    
+    def needs_an_argument ; false ; end
+    def takes_an_argument ; false ; end
+
   end
 
   # Integer number option class.
-  class IntOption < Option
+  class Int32Opt < Option
     @value : Int32?
     @default : Int32?
     getter :value, :default
@@ -286,11 +278,10 @@ module Optimist
       @value = val.to_i
     end
     
-    def multi : Bool ; false ; end
     def type_format ; "=<i>" ; end
     def add_argument_value(paramlist : Array(String), _neg_given)
       param = paramlist.first
-      unless param =~  /^-?[\d_]+$/
+      unless param =~ INT_RE
         raise CommandlineError.new("option '#{self.name}' needs a floating-point number")
       end
       @value = param.to_i
@@ -299,19 +290,17 @@ module Optimist
   end
 
   # Floating point number option class.
-  class FloatOption < Option
+  class Float64Opt < Option
     @value : Float64?
     @default : Float64?
     getter :value, :default
-    def initialize(name, desc, default : Float64?)
+    def initialize(name, desc, @default : Float64?)
       super
       @value = nil
-      @default = default
     end
-    def multi : Bool ; false ; end
-    
     def type_format ; "=<f>" ; end
     def add_argument_value(paramlist : Array(String), _neg_given)
+      disallow_multiple_args(paramlist)
       param = paramlist.first
       unless param =~ FLOAT_RE
         raise CommandlineError.new("option '#{self.name}' needs a floating-point number")
@@ -325,12 +314,11 @@ module Optimist
   # Option class for handling IO objects and URLs.
   # Note that this will return the file-handle, not the file-name
   # in the case of file-paths given to it.
-  class IOOption < Option
+  class FileOpt < Option
     
     @value : IO::FileDescriptor?
     @default : IO::FileDescriptor?
     getter :value, :default
-    def multi : Bool ; false ; end
     def type_format ; "=<filename/uri>" ; end
     def add_argument_value(paramlist : Array(String), _neg_given)
       param = paramlist.first
@@ -344,12 +332,10 @@ module Optimist
   end
 
   # Option class for handling Strings.
-  class StringOption < Option
+  class StringOpt < Option
     @value : String?
     @default : String?
     getter :value, :default
-    
-    def multi : Bool ; false ; end
     def type_format ; "=<s>" ; end
     def add_argument_value(paramlist : Array(String), _neg_given)
       @value = paramlist.first
@@ -358,7 +344,7 @@ module Optimist
   end
 
   # 
-  class StringFlagOption < StringOption
+  class StringFlagOpt < StringOpt
     @value : String?
     @default : String?
     getter :value, :default
@@ -368,24 +354,18 @@ module Optimist
       @min_args = 0
       @max_args = 1
     end
-    def multi : Bool ; false ; end
     def type_format ; "=<s?>" ; end
     def add_argument_value(paramlist : Array(String), neg_given)
       @given = true
-      
       @value = case paramlist.size
                when 0 then nil
                when 1 then paramlist.first
                else raise ArgumentError.new("Too many params given")
                end
     end
-    def compatible_with?(other_option)
-      selftype = typeof(self)
-      selftype == typeof(other_option) ||
-        typeof(other_option) == BooleanOption ||
-        typeof(other_option) == StringArrayOption
-    end
 
+    # can take an argument but doesnt need one.
+    def needs_an_argument ; false ; end
   end
 
 ###
@@ -396,35 +376,71 @@ module Optimist
 ###  ## the +:type+ parameter of #opt.
 ###
 ###  # Option class for handling multiple Integers
-###  class IntArrayOption < IntOption
-###    def multi ; true ; end
-###    def type_format ; "=<i+>" ; end
-###    #def initialize ; super ; @max_args = 999 ; end
-###  end
-###
-###  # Option class for handling multiple Floats
-###  class FloatArrayOption < FloatOption
-###    def type_format ; "=<f+>" ; end
-###    #def initialize ; super ; @max_args = 999 ; end
-###  end
-###
-###  # Option class for handling multiple Strings
-  class StringArrayOption < Option
+  class Int32ArrayOpt < Option
+    def type_format ; "=<i+>" ; end
+    @value : Array(Int32)
+    @default : Array(Int32)
+    getter :value, :default
+    def add_argument_value(paramlist : Array(String), _neg_given)
+      int_paramlist = paramlist.map do |strparam|
+        unless strparam =~ INT_RE
+          raise CommandlineError.new("option '#{self.name}' needs an integer number, cannot handle #{strparam}")
+        end
+        strparam.to_i
+      end
+      @value.concat int_paramlist
+      @given = true
+    end
+    def initialize(name, desc, default : Array(Int32)?)
+      # if default is given as nil, set as an empty array.
+      super(name, desc, default || [] of Int32) 
+      @value = [] of Int32
+    end
+  end
+  ###
+
+  # Option class for handling multiple Floats
+  class Float64ArrayOpt < Option
+    def type_format ; "=<f+>" ; end
+    @value : Array(Float64)
+    @default : Array(Float64)
+    getter :value, :default
+    def add_argument_value(paramlist : Array(String), _neg_given)
+
+      float_paramlist = paramlist.map do |strparam|
+        unless strparam =~ FLOAT_RE
+          raise CommandlineError.new("option '#{self.name}' needs a floating-point number, cannot handle #{strparam}")
+        end
+        strparam.to_f
+      end
+
+      @value.concat float_paramlist
+      @given = true
+    end
+    def initialize(name, desc, default : Array(Float64)?)
+      # if default is given as nil, set as an empty array.
+      super(name, desc, default || [] of Float64) 
+      @value = [] of Float64
+    end
+  end
+  
+# Option class for handling multiple Strings
+  class StringArrayOpt < Option
     @value : Array(String)
     @default : Array(String)
     getter :value, :default
-    
-    def multi : Bool ; false ; end
     def type_format ; "=<s+>" ; end
     def add_argument_value(paramlist : Array(String), _neg_given)
       @value.concat paramlist
       @given = true
     end
-    def initialize
-      super
+    def initialize(name, desc, default : Array(String)?)
+      # if default is given as nil, set as an empty array.
+      super(name, desc, default || [] of String) 
       @value = [] of String
     end
   end
+  
 ###
 ###  # Option class for handling Files/URLs via 'open'
 ###  class IOArrayOption < IOOption

@@ -1,3 +1,5 @@
+require "edits" # For suggestions
+
 module Optimist
 
   ## The commandline parser. In typical usage, the methods in this class
@@ -18,21 +20,22 @@ module Optimist
     @idents : Array(Ident)
     getter :idents
     def initialize(*syms)
-      @idents = idents.to_a
+      @idents = syms.to_a.map(&.to_s)
     end
   end
+  
   class DependConstraint < Constraint ; end
   class ConflictConstraint < Constraint ; end
 
   # an argument that is given to the parser.. this should be a temporary object.
   class GivenArg
 
-    property :params
+    #property :params
     getter :negative_given, :arg
     def initialize(@original_arg : String)
       @arg = @original_arg
       @negative_given = false
-      @params = [] of String # DefaultType
+      #@params = [] of String # DefaultType
     end
 
     def handle_no_forms!
@@ -195,15 +198,16 @@ module Optimist
     ## Marks two (or more!) options as requiring each other. Only handles
     ## undirected (i.e., mutual) dependencies. Directed dependencies are
     ## better modeled with Optimist::die.
-    def depends(*syms)
-      syms.each { |sym| raise ArgumentError.new("unknown option '#{sym}'") unless @specs[sym] }
-      @constraints << DependConstraint.new(*syms)
+    def depends(*idents)
+      idents.map(&.to_s).each { |ident| raise ArgumentError.new("unknown option '#{ident}'") unless @specs.has_key?(ident) }
+      @constraints << DependConstraint.new(*idents)
     end
 
     ## Marks two (or more!) options as conflicting.
-    def conflicts(*syms)
-      syms.each { |sym| raise ArgumentError.new("unknown option '#{sym}'") unless @specs[sym] }
-      @constraints << ConflictConstraint.new(*syms)
+    def conflicts(*idents)
+      pp! @specs.keys, idents
+      idents.map(&.to_s).each { |ident| raise ArgumentError.new("unknown option '#{ident}'") unless @specs.has_key?(ident) }
+      @constraints << ConflictConstraint.new(*idents)
     end
 
     ## Defines a set of words which cause parsing to terminate when
@@ -248,40 +252,35 @@ module Optimist
              end
     end
 
-    private def handle_unknown_argument(arg, candidates, suggestions)
-      errstring = "unknown argument '#{arg}'"
-      
-      #SUBC#      if self.responds_to?(:subcommand_name)
-      #SUBC#        errstring += " for command '#{self.subcommand_name}'"
-      #SUBC#      end
-      
-      ## TODO ##
-#      if suggestions
-#        input = arg.sub(/^[-]*/,"")
-#
-#        # Code borrowed from did_you_mean gem (was JaroWinkler here)
-#        jw_threshold = 0.75
-#        seed = candidates.select {|candidate| JaroWinkler.distance(candidate, input) >= jw_threshold } \
-#               .sort_by! {|candidate| JaroWinkler.distance(candidate.to_s, input) } \
-#               .reverse!
-#        # Correct mistypes
-#        threshold   = (input.length * 0.25).ceil
-#        has_mistype = seed.rindex {|c| Levenshtein.distance(c, input) <= threshold }
-#        corrections = if has_mistype
-#                        seed.take(has_mistype + 1)
-#                      else
-#                        # Correct misspells
-#                        seed.select do |candidate|
-#                          length    = input.length < candidate.length ? input.length : candidate.length
-#
-#                          Levenshtein.distance(candidate, input) < length
-#                        end.first(1)
-#                      end
-#        unless corrections.empty?
-#          dashdash_corrections = corrections.map{|s| "--#{s}" }
-#          errstring << ".  Did you mean: [#{dashdash_corrections.join(", ")}] ?"
-#        end
-#      end
+    private def handle_unknown_argument(arg : String, candidates : Array(String), suggestions : Bool)
+      errstring = "Unknown argument '#{arg}'."
+
+      if suggestions
+        input = arg.sub(/^[-]*/,"")
+        # Code borrowed from ruby didyoumean gem
+        jw_threshold = 0.75
+        seed = candidates.select {|candidate| Edits::Jaro.similarity(candidate, input) >= jw_threshold }
+               .sort_by {|candidate| Edits::Jaro.similarity(candidate.to_s, input) }
+               .reverse
+        
+        # Correct mistypes
+        threshold   = (input.size * 0.25).ceil
+        has_mistype = seed.rindex {|c| Edits::Levenshtein.distance(c, input) <= threshold }
+        p seed, has_mistype
+        corrections = if has_mistype
+                        seed.first(has_mistype + 1)
+                      else
+                        # Correct misspells
+                        seed.select do |candidate|
+                          length    = (input.size < candidate.size) ? input.size : candidate.size
+                          Edits::Levenshtein.distance(candidate, input) < length
+                        end.first(1)
+                      end
+        unless corrections.empty?
+          dashdash_corrections = corrections.map{ |s| "--#{s}" }
+          errstring += " Did you mean: [#{dashdash_corrections.join(", ")}] ?"
+        end
+      end
       raise CommandlineError.new(errstring)
     end
 
@@ -324,8 +323,8 @@ module Optimist
       required = {} of Ident => Bool
 
       # create default version/help options if not already defined
-      opt :version, "Print version and exit" if @version && ! (@specs.has_key?(:version) || @long.has_key?("version"))
-      opt :help, "Show this message" unless @specs.has_key?(:help) || @long.has_key?("help")
+      opt "version", "Print version and exit" if @version && ! (@specs.has_key?("version") || @long.has_key?("version"))
+      opt "help", "Show this message" unless @specs.has_key?("help") || @long.has_key?("help")
 
       @specs.each do |ident, opts|
         required[ident] = true if opts.required?
@@ -337,7 +336,8 @@ module Optimist
 
       # going to set given_args in a loop
       given_args = {} of Ident? => GivenArg
-
+      params_for_arg = {} of Ident? => Array(String)
+      
       @leftovers = each_arg cmdline do |original_arg, strparams|
 
         # The each_arg will return an original_arg string and any parameters
@@ -360,7 +360,7 @@ module Optimist
                 raise CommandlineError.new("invalid argument syntax: '#{givenarg.arg}'")
               end
 
-        p! [original_arg, params, ident]
+        ##pp! [original_arg, params, ident]
         
         if givenarg.arg.is_a?(Bool)
           raise Exception.new("arg cannot be bool") #TODO#
@@ -378,48 +378,41 @@ module Optimist
         
         handle_unknown_argument(givenarg.arg, @long.keys, @suggestions) unless ident
 
-        if given_args.includes?(ident) && !@specs[ident].multi
+        curopt = @specs[ident]
+        
+        if given_args.includes?(ident) && !curopt.multi
           raise CommandlineError.new("Option '#{givenarg.arg}' specified multiple times")
         end
 
-
-        #given_args[ident] ||= {} of Symbol => Bool
-        given_args[ident] = givenarg
-
+        ## **BAD** cannot overwrite given-arg here breaks when
+        ## we specify an option more than once !!!!
+        if given_args.has_key?(ident)
+          givenarg = given_args[ident]
+        else
+          given_args[ident] = givenarg
+        end
+        
         # The block returns the number of parameters taken.
         num_params_taken = 0
 
-        #DEBUG# puts "\nparams:#{params} npt:#{num_params_taken},ps:#{params.size}"
-
-        #old#if params.size > 0
-        #old#  if @specs[ident].min_args == 1 && @specs[ident].max_args == 1
-        #old#    given_args[ident][:params] << params[0, 1]  # take the first parameter
-        #old#    num_params_taken = 1
-        #old#  elsif @specs[ident].max_args > 1
-        #old#    given_args[ident][:params] << params        # take all the parameters
-        #old#    num_params_taken = params.size
-        #old#  end
-        #old#end
-
-        if params.size == 0
-          if @specs[ident].min_args == 0
-            #defval = (@specs[ident].default == false) ? true : @specs[ident].default
-            #given_args[ident].params << defval
+        # NOTE: no support for slurping multiple arguments after an option is given
+        # like Ruby optimist.
+        if params.empty? && curopt.needs_an_argument
+          raise CommandlineError.new("Must give an argument for #{curopt.name}")
+        elsif params.size > 0 && curopt.takes_an_argument
+          # take one param
+          unless params_for_arg.has_key?(ident)
+            params_for_arg[ident] = [] of String
           end
-        elsif params.size > 0
-          if params.size >= @specs[ident].max_args
-            # take smaller of the two sizes to determine how many parameters to take
-            num_params_taken = [params.size, @specs[ident].max_args].min
-            given_args[ident].params.concat params[0..num_params_taken]
-          else
-            # take all the parameters
-            given_args[ident].params.concat params
-            num_params_taken = params.size
-          end
+          params_for_arg[ident] << params.first
+          num_params_taken = 1
         end
+        
         num_params_taken
       end
 
+      #pp! given_args, params_for_arg
+      
       ## check for version and help args, and raise if set.
       ## HelpNeeded should pass the parser object so we know how to educate
       ## if we are in a global-command or subcommand
@@ -428,14 +421,24 @@ module Optimist
 
       ## check constraint satisfaction
       @constraints.each do |constraint|
-        constraint_ident = constraint.idents.find { |ident| given_args[ident] }
+        constraint_ident = constraint.idents.find { |ident| given_args.has_key?(ident) }
         next unless constraint_ident
-        
+
         case constraint
             in DependConstraint
-            constraint.idents.each { |ident| raise CommandlineError.new("--#{@specs[constraint_ident].long.long} requires --#{@specs[ident].long.long}") unless given_args.includes? ident }
+            constraint.idents.each do |ident|
+              unless given_args.has_key? ident
+                raise CommandlineError.new("--#{@specs[constraint_ident].long.long} requires --#{@specs[ident].long.long}")
+              end
+            end
+            
             in ConflictConstraint
-            constraint.idents.each { |ident| raise CommandlineError.new("--#{@specs[constraint_ident].long.long} conflicts with --#{@specs[ident].long.long}") if given_args.includes?(ident) && (ident != constraint_ident) }
+            constraint.idents.each do |ident|
+              if given_args.has_key?(ident) && (ident != constraint_ident)
+                raise CommandlineError.new("--#{@specs[constraint_ident].long.long} conflicts with --#{@specs[ident].long.long}")
+              end
+            end
+            
             in Constraint
             raise "wtf abstract case"
         end
@@ -443,8 +446,8 @@ module Optimist
 
       ## Fail if option is required but not given
       @specs.each do |ident, opts|
-        if opts.required? && !given_args.includes?(ident)
-          raise CommandlineError.new("option --#{@specs[ident].long} must be specified")
+        if opts.required? && !given_args.has_key?(ident)
+          raise CommandlineError.new("option --#{@specs[ident].long.long} must be specified")
         end
       end
 
@@ -453,15 +456,13 @@ module Optimist
         #arg, params, negative_given = given_data.values_at :arg, :params, :negative_given
 
         opts = @specs[ident]
+        params_for_this_opt = params_for_arg[ident]? || ([] of String)
 
-        
         #givenarg.params.each do |param|
         #  opts.add_argument_value(param)
         #end
-
         
-        pp! [givenarg, opts]
-        if givenarg.params.size < opts.min_args
+        if params_for_this_opt.size < opts.min_args
           unless opts.default
             raise CommandlineError.new("option '#{givenarg.arg}' needs a parameter")
           end
@@ -474,14 +475,16 @@ module Optimist
         end
 
         # TODO re-enable permitted feature
-        if opts.permitted && !givenarg.params.empty?
-          givenarg.params.each do |val|
+        if opts.permitted && !params_for_this_opt.empty?
+          params_for_this_opt.each do |val|
             opts.validate_permitted(givenarg.arg, val)
           end
         end
 
         #TODO: vals["#{ident}_given"] = true # mark argument as specified on the commandline
-        opts.add_argument_value(givenarg.params, givenarg.negative_given)
+        opts.add_argument_value(params_for_this_opt, givenarg.negative_given)
+
+        pp! [opts.name, opts.value, opts.given?]
         
 #        vals[ident] = 
 #
@@ -519,7 +522,7 @@ module Optimist
       #    self[m] || self[m.to_s]
       #  end
       #end
-      vals
+      @specs # vals
     end
 
     # Create default text banner in a string so we can override it
