@@ -142,17 +142,17 @@ module Optimist
 
     # no-block case
     def opt(name, desc : String = "", **opts)
-      opt(name, desc, **opts) { }
+      opt(name, desc, **opts) { |x| x }
     end
 
-    def opt(name, desc : String = "", **opts, &b)
+    def opt(name, desc : String = "", **opts, &block : Option -> Nil)
       #@myopts = opts
       #opts[:callback] = b
       #opts[:desc] = desc
 
-      o = Option.create(name.to_s, desc, **opts)
+      o = Option.create(name.to_s, desc, **opts, &block)
 
-      raise ArgumentError.new("you already have an argument named '#{name}'") if @specs.includes? o.name
+      raise ArgumentError.new("you already have an argument named '#{name}'") if @specs.has_key? o.name
       o.long.names.each do |lng|
         raise ArgumentError.new("long option name #{lng.inspect} is already taken; please specify a (different) :long/:alt") if @long.has_key?(lng)
         @long[lng] = o.name
@@ -169,11 +169,11 @@ module Optimist
       @order << OrderedOpt.new(o.name.to_s)
     end
 
-    def subcmd(name, desc=nil, **args, &b)
-      sc = SubcommandParser.new(name, desc, **args, &b)
-      @subcommand_parsers[name.to_sym] = sc
-      return sc
-    end
+#    def subcmd(name, desc=nil, **args, &b)
+#      sc = SubcommandParser.new(name, desc, **args, &b)
+#      @subcommand_parsers[name.to_sym] = sc
+#      return sc
+#    end
 
     ## Sets the version string. If set, the user can request the version
     ## on the commandline. Should probably be of the form "<program name>
@@ -205,7 +205,6 @@ module Optimist
 
     ## Marks two (or more!) options as conflicting.
     def conflicts(*idents)
-      pp! @specs.keys, idents
       idents.map(&.to_s).each { |ident| raise ArgumentError.new("unknown option '#{ident}'") unless @specs.has_key?(ident) }
       @constraints << ConflictConstraint.new(*idents)
     end
@@ -266,7 +265,6 @@ module Optimist
         # Correct mistypes
         threshold   = (input.size * 0.25).ceil
         has_mistype = seed.rindex {|c| Edits::Levenshtein.distance(c, input) <= threshold }
-        p seed, has_mistype
         corrections = if has_mistype
                         seed.first(has_mistype + 1)
                       else
@@ -322,14 +320,23 @@ module Optimist
       vals = {} of Ident? => Array(DefaultType)
       required = {} of Ident => Bool
 
+      
       # create default version/help options if not already defined
-      opt "version", "Print version and exit" if @version && ! (@specs.has_key?("version") || @long.has_key?("version"))
-      opt "help", "Show this message" unless @specs.has_key?("help") || @long.has_key?("help")
+      if @version && ! (@specs.has_key?("version") || @long.has_key?("version"))
+        opt "version", "Print version and exit"
+      end
+      unless @specs.has_key?("help") || @long.has_key?("help")
+        opt "help", "Show this message"
+      end
 
-      @specs.each do |ident, opts|
+      # Clone optshash after version/help may have been added.
+      optshash  = {} of String => Option
+      @specs.each { |k,v| optshash[k] = v.dup }
+
+      optshash.each do |ident, opts|
         required[ident] = true if opts.required?
         vals[ident] = [ opts.default ] # may need to do this if we dont fully specify all types:  .as(DefaultType)
-        vals[ident] = [] of DefaultType  if opts.multi && !opts.default # multi arguments default to [], not nil
+        vals[ident] = [] of DefaultType  if opts.takes_multiple && !opts.default # multi arguments default to [], not nil
       end
 
       resolve_default_short_options! unless @explicit_short_options
@@ -378,9 +385,9 @@ module Optimist
         
         handle_unknown_argument(givenarg.arg, @long.keys, @suggestions) unless ident
 
-        curopt = @specs[ident]
+        curopt = optshash[ident]
         
-        if given_args.includes?(ident) && !curopt.multi
+        if given_args.has_key?(ident) && !curopt.takes_multiple
           raise CommandlineError.new("Option '#{givenarg.arg}' specified multiple times")
         end
 
@@ -398,7 +405,7 @@ module Optimist
         # NOTE: no support for slurping multiple arguments after an option is given
         # like Ruby optimist.
         if params.empty? && curopt.needs_an_argument
-          raise CommandlineError.new("Must give an argument for #{curopt.name}")
+          raise CommandlineError.new("Must give an argument for '#{givenarg.arg}'")
         elsif params.size > 0 && curopt.takes_an_argument
           # take one param
           unless params_for_arg.has_key?(ident)
@@ -416,8 +423,8 @@ module Optimist
       ## check for version and help args, and raise if set.
       ## HelpNeeded should pass the parser object so we know how to educate
       ## if we are in a global-command or subcommand
-      raise VersionNeeded.new() if given_args.includes? :version
-      raise HelpNeeded.new(parser: self) if given_args.includes? :help
+      raise VersionNeeded.new() if given_args.has_key? "version"
+      raise HelpNeeded.new(parser: self) if given_args.has_key? "help"
 
       ## check constraint satisfaction
       @constraints.each do |constraint|
@@ -428,14 +435,14 @@ module Optimist
             in DependConstraint
             constraint.idents.each do |ident|
               unless given_args.has_key? ident
-                raise CommandlineError.new("--#{@specs[constraint_ident].long.long} requires --#{@specs[ident].long.long}")
+                raise CommandlineError.new("--#{optshash[constraint_ident].long.long} requires --#{optshash[ident].long.long}")
               end
             end
             
             in ConflictConstraint
             constraint.idents.each do |ident|
               if given_args.has_key?(ident) && (ident != constraint_ident)
-                raise CommandlineError.new("--#{@specs[constraint_ident].long.long} conflicts with --#{@specs[ident].long.long}")
+                raise CommandlineError.new("--#{optshash[constraint_ident].long.long} conflicts with --#{optshash[ident].long.long}")
               end
             end
             
@@ -445,9 +452,9 @@ module Optimist
       end
 
       ## Fail if option is required but not given
-      @specs.each do |ident, opts|
+      optshash.each do |ident, opts|
         if opts.required? && !given_args.has_key?(ident)
-          raise CommandlineError.new("option --#{@specs[ident].long.long} must be specified")
+          raise CommandlineError.new("option --#{optshash[ident].long.long} must be specified")
         end
       end
 
@@ -455,7 +462,7 @@ module Optimist
       given_args.each do |ident, givenarg|
         #arg, params, negative_given = given_data.values_at :arg, :params, :negative_given
 
-        opts = @specs[ident]
+        opts = optshash[ident]
         params_for_this_opt = params_for_arg[ident]? || ([] of String)
 
         #givenarg.params.each do |param|
@@ -466,12 +473,6 @@ module Optimist
           unless opts.default
             raise CommandlineError.new("option '#{givenarg.arg}' needs a parameter")
           end
-          #if opts.array_default?
-          #  raise Exception.new("badness")
-          #  #TODO# givenarg.params << [opts.default.clone.to_s]
-          #else
-          #  #TODO# givenarg.params << [opts.default.to_s]
-          #end
         end
 
         # TODO re-enable permitted feature
@@ -484,8 +485,6 @@ module Optimist
         #TODO: vals["#{ident}_given"] = true # mark argument as specified on the commandline
         opts.add_argument_value(params_for_this_opt, givenarg.negative_given)
 
-        pp! [opts.name, opts.value, opts.given?]
-        
 #        vals[ident] = 
 #
 #        if opts.min_args==0 && opts.max_args==1
@@ -504,10 +503,7 @@ module Optimist
 #          vals[ident] = vals[ident][0]  # single option, with multiple parameters
 #        end
 #        # else: multiple options, with multiple parameters
-
-        #        if !opts.callback.is_a?(Nil)
-        #          opts.callback.call(vals[ident])
-        #        end
+        opts.trigger_callback
         
       end
 
@@ -516,19 +512,13 @@ module Optimist
       cmdline.clear
       @leftovers.each { |l| cmdline << l }
 
-      ## allow openstruct-style accessors
-      #class << vals
-      #  def method_missing(m, *_args)
-      #    self[m] || self[m.to_s]
-      #  end
-      #end
-      @specs # vals
+      return optshash
     end
 
     # Create default text banner in a string so we can override it
     # in the SubcommandParser class.
     def default_banner
-      command_name = File.basename($0).gsub(/\.[^.]+$/, "")
+      command_name = File.basename(PROGRAM_NAME).gsub(/\.[^.]+$/, "")
       bannertext = ""
       bannertext += "Usage: #{command_name} #{@usage}\n" if @usage
       bannertext += "#{@synopsis}\n" if @synopsis
@@ -565,19 +555,17 @@ module Optimist
       end
 
       @order.each do |item|
-        case item
-            in OrderedText
-            # print text/banner here
-            stream.puts wrap(item.str)
-            
-            in OrderedOpt
-            spec = @specs[item.str]
-            stream.printf "  %-#{leftcol_width}s    ", left[item.str]
-            desc = spec.full_description
-            
-            stream.puts wrap(desc, width: width - rightcol_start - 1, prefix: rightcol_start)
-            
-        end
+        wrapped_strs = case item
+                           in OrderedText # text/banner
+                           wrap(item.str) 
+                           in OrderedOpt  # an option
+                           optname = item.str
+                           optspec = @specs[optname]
+                           stream.printf "  %-#{leftcol_width}s    ", left[optname]
+                           desc = optspec.full_description
+                           wrap(desc, width: width - rightcol_start - 1, prefix: rightcol_start)
+                       end
+        stream.puts wrapped_strs.join("\n")
       end
     end
 
@@ -603,7 +591,7 @@ module Optimist
       80
     end
 
-    def wrap(str, width : Int32 = 0, prefix : Int32 = 0)
+    def wrap(str, width : Int32 = 0, prefix : Int32 = 0) : Array(String)
       if str == ""
         [""]
       else
@@ -728,10 +716,15 @@ module Optimist
         opts = @specs[name]
         next if opts.doesnt_need_autogen_short
 
-        c = opts.long.long.split(//).find { |d| d !~ Optimist::ShortNames::INVALID_ARG_REGEX && !@short.includes?(d) }
+        c = opts.long.long.chars.find do |chr|
+          d = chr.to_s
+          valid_char = !d.match(Optimist::ShortNames::INVALID_ARG_REGEX)
+          short_doesnt_exist = !@short.has_key?(d)
+          valid_char && short_doesnt_exist
+        end
         if c # found a character to use
-          opts.short.add c
-          @short[c] = name
+          opts.short.add c.to_s
+          @short[c.to_s] = name
         end
       end
     end

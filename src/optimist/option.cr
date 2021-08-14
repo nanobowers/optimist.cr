@@ -15,18 +15,18 @@ module Optimist
     # defaults
     @name : String
     @permitted : PermittedType
-    @callback : Proc(String,String)?
+    @callback : Option -> Nil
     @desc : String
     @given : Bool
     @arguments_applied : Int32
     
-    def initialize(name, desc, default : T) forall T
+    def initialize(name, @desc, default : T) forall T
       @long = LongNames.new
       # can be an Array of one-char strings, a one-char String, nil or false
       @short = ShortNames.new
-      @callback = nil
+      @callback = ->(x : Option){ }
       @name = "__unknown__"
-      @desc = ""
+      #@desc = ""
       @hidden = false
       @default = default
       @permitted = nil
@@ -44,8 +44,12 @@ module Optimist
 
     def needs_an_argument ; true ; end # flag-like options do not need arguments
     def takes_an_argument ; true ; end # flag-only options do not take an argument
-    def multi ; false ; end # can take many arguments.. TODO: REMOVE
+    def takes_multiple ; @max_args > 1 ; end # overridden in array-versions
 
+    def trigger_callback
+      @callback.call(self)
+    end
+    
     def disallow_multiple_args(paramlist : Array(String))
       if self.given? || paramlist.size > 1
         raise CommandlineError.new("Option '#{self.name}' cannot be given more than once")
@@ -175,7 +179,7 @@ module Optimist
                     permitted : PermittedType = nil,
                     permitted_response : String? = nil,
                     required : Bool = false,
-                    **opts)
+                    **opts, &block : Option -> Nil)
 
       if cls.is_a?(Nil)
         if default.is_a?(Int32)
@@ -206,6 +210,13 @@ module Optimist
       opt_inst.permitted_response = permitted_response if permitted_response
       opt_inst.name = name
       opt_inst.required = required
+
+      ## set multi (affects BoolOpt only)
+      if opt_inst.is_a?(BoolOpt)
+        opt_inst.multi = multi
+      end
+      
+      opt_inst.callback = block
       
       return opt_inst # some sort of Option
     end
@@ -243,13 +254,27 @@ module Optimist
   class BoolOpt < Option
     @value : Bool?
     @default : Bool?
-    getter :value, :default
+    @multi : Bool
+
+    property :multi
+    getter :default
+    setter :value
+    
     def initialize(name, desc, default : Bool?)
       super
+      @multi = false
       @value = nil
       @default = default.nil? ? false : default
       @min_args = 0
       @max_args = 0
+    end
+
+    def value
+      return @value.nil? ? @default : @value
+    end
+
+    def takes_multiple
+      @multi
     end
     
     def add_argument_value(_paramlist : Array(String), neg_given)
@@ -266,12 +291,17 @@ module Optimist
   class Int32Opt < Option
     @value : Int32?
     @default : Int32?
-    getter :value, :default
+    getter :default
+    setter :value
     
     def initialize(name, desc, default : Int32?)
       super
       @value = nil
       @default = default
+    end
+
+    def value
+      return @value.nil? ? @default : @value
     end
 
     def add_argument_value(val : String)
@@ -293,11 +323,17 @@ module Optimist
   class Float64Opt < Option
     @value : Float64?
     @default : Float64?
-    getter :value, :default
+    getter :default
+    setter :value
     def initialize(name, desc, @default : Float64?)
       super
       @value = nil
     end
+    
+    def value
+      return @value.nil? ? @default : @value
+    end
+
     def type_format ; "=<f>" ; end
     def add_argument_value(paramlist : Array(String), _neg_given)
       disallow_multiple_args(paramlist)
@@ -318,15 +354,25 @@ module Optimist
     
     @value : IO::FileDescriptor?
     @default : IO::FileDescriptor?
-    getter :value, :default
+    getter :default
+    setter :value
+    def value
+      return @value.nil? ? @default : @value
+    end
+
     def type_format ; "=<filename/uri>" ; end
     def add_argument_value(paramlist : Array(String), _neg_given)
       param = paramlist.first
       @value = if param =~ /^(stdin|\-)$/i
                  STDIN
                else
-                 File.open(param)
+                 begin
+                   File.open(param)
+                 rescue File::NotFoundError
+                   raise CommandlineError.new("Error opening file '#{param}' given with '#{self.name}'")
+                 end
                end
+
       @given = true
     end
   end
@@ -335,7 +381,13 @@ module Optimist
   class StringOpt < Option
     @value : String?
     @default : String?
-    getter :value, :default
+    property :value
+    getter :default
+
+    def value
+      return @value.nil? ? @default : @value
+    end
+
     def type_format ; "=<s>" ; end
     def add_argument_value(paramlist : Array(String), _neg_given)
       @value = paramlist.first
@@ -347,7 +399,14 @@ module Optimist
   class StringFlagOpt < StringOpt
     @value : String?
     @default : String?
-    getter :value, :default
+    setter :value
+    getter :default
+
+    def value : String?
+      return @default if @value.nil?
+      @value
+    end
+
     def initialize(name, desc, @default : String?)
       super
       #@default = default.nil? ? false : default
@@ -380,7 +439,9 @@ module Optimist
     def type_format ; "=<i+>" ; end
     @value : Array(Int32)
     @default : Array(Int32)
-    getter :value, :default
+    property :value
+    getter :default
+
     def add_argument_value(paramlist : Array(String), _neg_given)
       int_paramlist = paramlist.map do |strparam|
         unless strparam =~ INT_RE
@@ -395,7 +456,18 @@ module Optimist
       # if default is given as nil, set as an empty array.
       super(name, desc, default || [] of Int32) 
       @value = [] of Int32
+      @max_args = 999
     end
+
+    # For object duplication case we need to return an invalidated object
+    # so reset the value/given fields which are filled in by the option.
+    def dup
+      super
+      @value = [] of Int32
+      @given = false
+      self
+    end
+
   end
   ###
 
@@ -404,7 +476,8 @@ module Optimist
     def type_format ; "=<f+>" ; end
     @value : Array(Float64)
     @default : Array(Float64)
-    getter :value, :default
+    property :value
+    getter :default
     def add_argument_value(paramlist : Array(String), _neg_given)
 
       float_paramlist = paramlist.map do |strparam|
@@ -421,31 +494,55 @@ module Optimist
       # if default is given as nil, set as an empty array.
       super(name, desc, default || [] of Float64) 
       @value = [] of Float64
+      @max_args = 999
     end
+
+    # For object duplication case we need to return an invalidated object
+    # so reset the value/given fields which are filled in by the option.
+    def dup
+      super
+      @value = [] of Float64
+      @given = false
+      self
+    end
+
   end
   
 # Option class for handling multiple Strings
   class StringArrayOpt < Option
     @value : Array(String)
     @default : Array(String)
-    getter :value, :default
+    setter :value
+    getter :default
+
+    def value
+      return @default if @value.empty?
+      @value
+    end
+    
     def type_format ; "=<s+>" ; end
+    
     def add_argument_value(paramlist : Array(String), _neg_given)
       @value.concat paramlist
       @given = true
     end
+    
     def initialize(name, desc, default : Array(String)?)
       # if default is given as nil, set as an empty array.
       super(name, desc, default || [] of String) 
       @value = [] of String
+      @max_args = 999
     end
+
+    # For object duplication case we need to return an invalidated object
+    # so reset the value/given fields which are filled in by the option.
+    def dup
+      super
+      @value = [] of String
+      @given = false
+      self
+    end
+    
   end
   
-###
-###  # Option class for handling Files/URLs via 'open'
-###  class IOArrayOption < IOOption
-###    def type_format ; "=<filename/uri+>" ; end
-###    #def initialize(name ; super ; @max_args = 999 ; end
-###  end
-
 end
