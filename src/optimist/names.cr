@@ -2,8 +2,6 @@ module Optimist
   
 class LongNames
 
-  alias LongName = Symbol | String | Nil
-  
   @truename : String?
   @long : String?
   
@@ -26,20 +24,20 @@ class LongNames
     @long.to_s
   end
   
-  def set(name : LongName, lopt : String?, alts : AlternatesType)
+  def set(name : LongNameType , lopt : LongNameType , alts : AlternatesType)
     @truename = name.to_s
     valid_lopt = case lopt
-                     in String
-                     lopt
+                     in String, Symbol
+                     lopt.to_s
                      in Nil
                      name.to_s.gsub("_", "-")
                  end
     @long = make_valid(valid_lopt)
     @alts = case alts
-                in String
-                [ make_valid(alts) ]
-                in Array(String)
-                alts.map { |a| make_valid(a) }
+                in String, Symbol
+                [ make_valid(alts.to_s) ]
+                in Array(String|Symbol), Array(String), Array(Symbol)
+                alts.map { |a| make_valid(a.to_s) }
                 in Nil
                 [] of String
             end
@@ -57,8 +55,8 @@ end
 
 class ShortNames
 
-  alias ShortArg = String | Char
-  alias ShortArgs = Array(String) | Array(Char)
+  alias ShortArg = String | Char | Symbol
+  alias ShortArgs = Array(String|Char|Symbol)
   
   INVALID_ARG_REGEX = /[\d-]/
 

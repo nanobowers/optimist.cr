@@ -54,11 +54,15 @@ module Optimist
 ##  * :suggestions    : Enables suggestions when unknown arguments are given
 ##  * :explicit_short : Short options will only be created where explicitly defined.  If you do not like short-options, this will prevent having to define :short: nil for all of your options.
 
+  
+  @@last_parser = Parser.new
+
 def self.options(args : Array(String) = ARGV, **a, &block)
   #@@last_parser = Parser.new(**a) do
   #  block
   #end
   parser = Parser.new(**a)
+  @@last_parser = parser
   with parser yield
   
   self.with_standard_exception_handling(parser) { parser.parse args }
@@ -148,7 +152,7 @@ def self.educate
     @@last_parser.educate
     exit
   else
-    raise ArgumentError, "Optimist::educate can only be called after Optimist::options"
+    raise ArgumentError.new("Optimist::educate can only be called after Optimist::options")
   end
 end
 

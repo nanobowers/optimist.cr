@@ -171,9 +171,9 @@ module Optimist
     # to be able to set the option's type.
     def self.create(name, desc,
                     cls : Class? = nil,
-                    long : String? = nil,
+                    long : LongNameType = nil,
                     alt : AlternatesType = nil,
-                    short : (String|Bool|Nil|Char) = nil,
+                    short : ShortNameType = nil,
                     multi : Bool = false,
                     default : DefaultType = nil,
                     permitted : PermittedType = nil,
@@ -206,7 +206,7 @@ module Optimist
       opt_inst.short.add short             ## fill in short opts
 
       ## fill in permitted values
-      opt_inst.permitted = permitted
+      opt_inst.permitted = permitted.as(PermittedType)
       opt_inst.permitted_response = permitted_response if permitted_response
       opt_inst.name = name
       opt_inst.required = required

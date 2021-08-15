@@ -546,7 +546,11 @@ module Optimist
       left = {} of Ident => String
       @specs.each { |name, spec| left[name] = spec.educate }
 
-      leftcol_width = left.values.map(&.size).max || 0
+      leftcol_width = if left.empty?
+                        0
+                      else
+                        left.values.map(&.size).max || 0
+                      end
       rightcol_start = leftcol_width + 6 # spaces
 
       # print a default banner here if there is no text/banner
