@@ -45,7 +45,7 @@ describe Optimist::Parser do
   end
 
   it "produces a version when version is set" do
-    parser.version = "optimist 5.2.3"
+    parser.version "optimist 5.2.3"
     expect_raises(VersionNeeded) { parser.parse %w(-v) }
     expect_raises(VersionNeeded) { parser.parse %w(--version) }
   end
@@ -63,16 +63,14 @@ describe Optimist::Parser do
 
   it "can generate version with other args present" do
     parser.opt :arg1, ""
-    parser.version = "1.1"
+    parser.version "1.1"
     expect_raises(VersionNeeded) { parser.parse %w(--arg1 --version) }
   end
 
   it "can generate version with other args erroring" do
     parser.opt :arg1, "", type: String
-    parser.version = "1.1"
+    parser.version "1.1"
     expect_raises(VersionNeeded) { parser.parse %w(--arg1 --version) }
   end
-
-
 
 end

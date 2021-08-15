@@ -14,19 +14,19 @@ describe Optimist::Parser do
 
   it "has a version" do
     parser.version.should be_nil
-    parser.version = "optimist 5.2.3"
+    parser.version "optimist 5.2.3"
     parser.version.should eq "optimist 5.2.3"
   end
 
   it "has a usage" do
     parser.usage.should be nil
-    parser.usage = "usage string"
+    parser.usage "usage string"
     parser.usage.should eq "usage string"
   end
 
   it "has a synopsis" do
     parser.synopsis.should be_nil
-    parser.synopsis = "synopsis string"
+    parser.synopsis "synopsis string"
     parser.synopsis.should eq "synopsis string"
   end
 
@@ -761,7 +761,7 @@ EOM
   describe "version" do
     before_each do
       parser.opt :asdf, "desc", cls: StringOpt
-      parser.version = "version"
+      parser.version "version"
     end
     
     it "raises VersionNeeded" do

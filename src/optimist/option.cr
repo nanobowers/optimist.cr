@@ -75,7 +75,7 @@ module Optimist
       optionlist = [] of String
       optionlist.concat(short.chars.map { |o| "-#{o}" })
       optionlist.concat(long.names.map { |o| "--#{o}" })
-      optionlist.compact.join(", ") + type_format + (min_args==0 && default ? ", --no-#{long}" : "")
+      optionlist.compact.join(", ") + type_format + (min_args==0 && default ? ", --no-#{long.to_s}" : "")
     end
 
     ## Format the educate-line description including the default and permitted value(s)
@@ -99,8 +99,7 @@ module Optimist
     ## Format the educate-line description including the default-value(s)
     def description_with_default(str)
       return str unless default
-      default_s = default.inspect
-      return "#{str} (Default: #{default_s})"
+      return "#{str} (Default: #{default.inspect})"
     end
 
     ## Format the educate-line description including the permitted-value(s)
@@ -112,7 +111,9 @@ module Optimist
                         end.join(", ")
                         in Range
                         permitted.as(Range).to_a.map(&.to_s).join(", ")
-                        in Regex, Nil
+                        in Regex
+                        permitted.inspect
+                        in Nil
                         permitted.to_s
                     end
       return "#{str} (Permitted: #{permitted_s})"
@@ -175,7 +176,7 @@ module Optimist
                     alt : AlternatesType = nil,
                     short : ShortNameType = nil,
                     multi : Bool = false,
-                    default : DefaultType = nil,
+                    default : _ = nil,
                     permitted : PermittedType = nil,
                     permitted_response : String? = nil,
                     required : Bool = false,
@@ -195,8 +196,7 @@ module Optimist
         elsif default.is_a?(IO::FileDescriptor)
           opt_inst = FileOpt.new(name, desc, default)
         else # nil??
-          opt_inst = BoolOpt.new(name, desc, default)
-          default = false
+          opt_inst = BoolOpt.new(name, desc, default.nil? ? false : default.as(Bool))
         end
       else
         opt_inst = cls.new(name, desc, default)
@@ -312,7 +312,7 @@ module Optimist
     def add_argument_value(paramlist : Array(String), _neg_given)
       param = paramlist.first
       unless param =~ INT_RE
-        raise CommandlineError.new("option '#{self.name}' needs a floating-point number")
+        raise CommandlineError.new("option '#{self.name}' needs an integer number")
       end
       @value = param.to_i
       @given = true

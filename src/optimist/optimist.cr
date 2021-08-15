@@ -131,7 +131,7 @@ def self.die(arg, msg = nil, error_code = nil)
   if @@last_parser
     @@last_parser.die arg, msg, error_code
   else
-    raise ArgumentError, "Optimist::die can only be called after Optimist::options"
+    raise ArgumentError.new "Optimist::die can only be called after Optimist::options"
   end
 end
 

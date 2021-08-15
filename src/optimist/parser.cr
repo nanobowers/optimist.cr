@@ -178,16 +178,26 @@ module Optimist
     ## Sets the version string. If set, the user can request the version
     ## on the commandline. Should probably be of the form "<program name>
     ## <version number>".
-    property :version
+    def version(arg=nil)
+      @version = arg unless arg.nil?
+      @version
+    end
+
 
     ## Sets the usage string. If set the message will be printed as the
     ## first line in the help (educate) output and ending in two new
     ## lines.
-    property :usage
+    def usage(arg=nil)
+      @usage = arg unless arg.nil?
+      @usage
+    end
 
     ## Adds a synopsis (command summary description) right below the
     ## usage line, or as the first line if usage isn't specified.
-    property :synopsis
+    def synopsis(arg=nil)
+      @synopsis = arg unless arg.nil?
+      @synopsis
+    end
 
     ## Adds text to the help display. Can be interspersed with calls to
     ## #opt to build a multi-section help page.
@@ -333,12 +343,6 @@ module Optimist
       optshash  = {} of String => Option
       @specs.each { |k,v| optshash[k] = v.dup }
 
-      optshash.each do |ident, opts|
-        required[ident] = true if opts.required?
-        vals[ident] = [ opts.default ] # may need to do this if we dont fully specify all types:  .as(DefaultType)
-        vals[ident] = [] of DefaultType  if opts.takes_multiple && !opts.default # multi arguments default to [], not nil
-      end
-
       resolve_default_short_options! unless @explicit_short_options
 
       # going to set given_args in a loop
@@ -350,6 +354,7 @@ module Optimist
         # The each_arg will return an original_arg string and any parameters
         # that follow it, up to either the next thing that looks like an
         # option or the termination string '--'.
+        #
         # Now we need to decide if these extra parameters should actually be
         # associated with the option, or if we need to add them on to the
         # leftovers list
@@ -367,8 +372,6 @@ module Optimist
                 raise CommandlineError.new("invalid argument syntax: '#{givenarg.arg}'")
               end
 
-        ##pp! [original_arg, params, ident]
-        
         if givenarg.arg.is_a?(Bool)
           raise Exception.new("arg cannot be bool") #TODO#
         elsif givenarg.arg =~ /--no-/
@@ -399,10 +402,10 @@ module Optimist
           given_args[ident] = givenarg
         end
         
-        # The block returns the number of parameters taken.
+        # This block returns the number of parameters taken.
         num_params_taken = 0
 
-        # NOTE: no support for slurping multiple arguments after an option is given
+        # NOTE: No support for slurping multiple arguments after an option is given
         # like Ruby optimist.
         if params.empty? && curopt.needs_an_argument
           raise CommandlineError.new("Must give an argument for '#{givenarg.arg}'")
@@ -418,15 +421,13 @@ module Optimist
         num_params_taken
       end
 
-      #pp! given_args, params_for_arg
-      
-      ## check for version and help args, and raise if set.
+      ## Check for version and help args, and raise if set.
       ## HelpNeeded should pass the parser object so we know how to educate
       ## if we are in a global-command or subcommand
       raise VersionNeeded.new() if given_args.has_key? "version"
       raise HelpNeeded.new(parser: self) if given_args.has_key? "help"
 
-      ## check constraint satisfaction
+      ## Check constraint satisfaction
       @constraints.each do |constraint|
         constraint_ident = constraint.idents.find { |ident| given_args.has_key?(ident) }
         next unless constraint_ident
@@ -447,7 +448,7 @@ module Optimist
             end
             
             in Constraint
-            raise "wtf abstract case"
+            raise "hit impossible abstract case"
         end
       end
 
@@ -465,10 +466,6 @@ module Optimist
         opts = optshash[ident]
         params_for_this_opt = params_for_arg[ident]? || ([] of String)
 
-        #givenarg.params.each do |param|
-        #  opts.add_argument_value(param)
-        #end
-        
         if params_for_this_opt.size < opts.min_args
           unless opts.default
             raise CommandlineError.new("option '#{givenarg.arg}' needs a parameter")
@@ -482,29 +479,10 @@ module Optimist
           end
         end
 
-        #TODO: vals["#{ident}_given"] = true # mark argument as specified on the commandline
+
         opts.add_argument_value(params_for_this_opt, givenarg.negative_given)
 
-#        vals[ident] = 
-#
-#        if opts.min_args==0 && opts.max_args==1
-#          if opts.multi
-#            vals[ident] = vals[ident].map { |p| p[0] }
-#          else
-#            vals[ident] = vals[ident][0][0]
-#          end
-#        elsif opts.min_args==1 && opts.max_args==1
-#          if opts.multi         # multiple options, each with a single parameter
-#            vals[ident] = vals[ident].map { |p| p[0] }
-#          else                  # single parameter
-#            vals[ident] = vals[ident][0][0]
-#          end
-#        elsif opts.max_args>1 && !opts.multi?
-#          vals[ident] = vals[ident][0]  # single option, with multiple parameters
-#        end
-#        # else: multiple options, with multiple parameters
         opts.trigger_callback
-        
       end
 
       ## modify input in place with only those
@@ -612,7 +590,7 @@ module Optimist
     def die(arg, msg = nil, error_code = nil)
       msg, error_code = nil, msg if msg.is_a?(Int)
       if msg
-        STDERR.puts "Error: argument --#{@specs[arg].long} #{msg}."
+        STDERR.puts "Error: argument --#{@specs[arg].long.long} #{msg}."
       else
         STDERR.puts "Error: #{arg}."
       end

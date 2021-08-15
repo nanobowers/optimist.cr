@@ -38,7 +38,7 @@ describe Optimist do
     end
 
     it "tests_usage" do
-      parser.usage = "usage string"
+      parser.usage "usage string"
       assert_educates(parser, /^Usage: \S* usage string\n\nOptions:/)
     end
 
@@ -62,7 +62,7 @@ describe Optimist do
         help.size.should eq 2 # options, then -h
 
         parser = Parser.new
-        parser.version = "my version"
+        parser.version "my version"
         parser.parse([] of String)
         help = helplines(parser)
         help[0].should match(/my version/i)
@@ -78,7 +78,7 @@ describe Optimist do
 
       it "has an optional usage" do
         parser = Parser.new
-        parser.usage = "OPTIONS FILES"
+        parser.usage "OPTIONS FILES"
         parser.parse([] of String)
         help = helplines(parser)
         help[0].should match(/OPTIONS FILES/i)
@@ -87,7 +87,7 @@ describe Optimist do
 
       it "has an optional synopsis" do
         parser = Parser.new
-        parser.synopsis = "About this program"
+        parser.synopsis "About this program"
         parser.parse([] of String)
         help = helplines(parser)
         help[0].should match(/About this program/i)
@@ -96,8 +96,8 @@ describe Optimist do
 
       it "has a specific order for usage and synopsis" do
         parser = Parser.new
-        parser.usage = "OPTIONS FILES"
-        parser.synopsis = "About this program"
+        parser.usage "OPTIONS FILES"
+        parser.synopsis "About this program"
         parser.parse([] of String)
         help = helplines(parser)
         help[0].should match(/OPTIONS FILES/i)
