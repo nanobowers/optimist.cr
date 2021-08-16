@@ -587,20 +587,20 @@ module Optimist
     end
 
     ## The per-parser version of Optimist::die (see that for documentation).
-    def die(arg, msg = nil, error_code = nil)
+    def die(arg, msg = nil, error_code = nil, stderr : IO = STDERR)
       msg, error_code = nil, msg if msg.is_a?(Int)
       if msg
-        STDERR.puts "Error: argument --#{@specs[arg].long.long} #{msg}."
+        stderr.puts "Error: argument --#{@specs[arg].long.long} #{msg}."
       else
-        STDERR.puts "Error: #{arg}."
+        stderr.puts "Error: #{arg}."
       end
       if @educate_on_error
-        STDERR.puts
-        educate STDERR
+        stderr.puts
+        educate stderr
       else
-        STDERR.puts "Try --help for help."
+        stderr.puts "Try --help for help."
       end
-      exit(error_code || -1)
+      raise SystemExit.new(error_code || -1)
     end
 
     ## yield successive arg, parameter pairs

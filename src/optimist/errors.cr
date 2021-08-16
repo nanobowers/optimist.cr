@@ -4,7 +4,6 @@ module Optimist
   ## you're using the Optimist::options entry.
   class CommandlineError < Exception
     getter :error_code
-
     def initialize(msg, error_code : Int32? = nil)
       super(msg)
       @error_code = error_code
@@ -27,4 +26,12 @@ module Optimist
   class VersionNeeded < Exception
   end
 
+  ## Replacement for exit() of sorts.
+  class SystemExit < Exception
+    getter :error_code
+    def initialize(error_code : Int32 = 0)
+      @error_code = error_code
+    end
+  end
+  
 end

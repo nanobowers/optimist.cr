@@ -2,197 +2,225 @@ require "./spec_helper"
 
 include Optimist
 
+module Optimist
+  def self.reset_last_parser ; @@last_parser = nil ; end
+end
+
 describe Optimist do
 
-  parser = Parser.new
-  
-  Spec.before_each do
+  describe "module functions" do
+    
     parser = Parser.new
-    #Optimist.send(:instance_variable_set, "@last_parser", nil)
-  end
-
-
-  it "tests_options" do       
-    opts = Optimist.options ["-f"] do
-      opt :f
+    
+    Spec.before_each do
+      parser = Parser.new
+      Optimist.disable_exit
+      Optimist.reset_last_parser
     end
-    opts["f"].value.should be_true
-  end
+    
+    Spec.after_each do
+      Optimist.enable_exit
+    end
 
-  pending "tests_options_die_default" do
-    assert_stderr(/Error: unknown argument.*Try --help/m) do
-      assert_system_exit(-1) do
-        Optimist.options ["-f"] do
+    it "has options" do
+      opts = Optimist.options ["-f"] do
+        opt :f
+      end
+      opts["f"].value.should be_true
+    end
+
+    it "tests_options_die_default" do
+      sio = IO::Memory.new
+      ex = expect_raises(SystemExit) do
+        Optimist.options(["-f"], stderr: sio) do
           opt :x
         end
       end
+      ex.error_code.should eq -1
+      sio.to_s.should match /Error: unknown argument.*Try --help/mi
     end
-  end
 
-  pending "tests_options_die_educate_on_error" do
-    assert_stderr(/Error: unknown argument.*Options/m) do
-      assert_system_exit(-1) do
-        Optimist.options ["-f"] do
+    # This next test prints too much output
+    # because there is no way to currently push a filehandle down into it.
+    it "tests_options_die_educate_on_error" do
+      sio = IO::Memory.new
+      ex = expect_raises(SystemExit) do
+        Optimist.options(["-f"], stderr: sio) do
           opt :x
           educate_on_error
         end
       end
+      sio.to_s.should match /Error: unknown argument.*Options/mi
     end
-  end
 
-  pending "tests_die_without_options_ever_run" do
-    expect_raises(ArgumentError) { Optimist.die "hello" }
-  end
+    it "tests_die_without_options_ever_run" do
+      ex = expect_raises(ArgumentError, /die can only be called after/i) {
+        Optimist.die "hello"
+      }
+    end
 
-  pending "tests_die" do
-    assert_stderr(/Error: issue with parsing/) do
-      assert_system_exit(-1) do
-        Optimist.options [] of String
-        Optimist.die "issue with parsing"
+    it "tests_die" do
+      sio = IO::Memory.new
+      ex = expect_raises(SystemExit) {
+        Optimist.options([] of String) {}
+        Optimist.die "issue with parsing", stderr: sio
+      }
+      ex.error_code.should eq -1
+      sio.to_s.should match /Error: issue with parsing/
+    end
+
+    it "tests_die_custom_error_code" do
+      sio = IO::Memory.new
+      ex = expect_raises(SystemExit) do
+        Optimist.options([] of String) {}
+        Optimist.die "issue with parsing", nil, 5, stderr: sio
       end
+      ex.error_code.should eq 5
+      sio.to_s.should match /Error: issue with parsing/
     end
-  end
 
-  pending "tests_die_custom_error_code" do
-    assert_stderr(/Error: issue with parsing/) do
-      assert_system_exit(5) do
-        Optimist.options [] of String
-        Optimist.die "issue with parsing", nil, 5
+    it "tests_die_custom_error_code_two_args" do 
+      sio = IO::Memory.new
+      ex = expect_raises(SystemExit) do
+        Optimist.options([] of String) {}
+        Optimist.die "issue with parsing", 5, stderr: sio
       end
+      ex.error_code.should eq 5
+      sio.to_s.should match /Error: issue with parsing/
     end
-  end
 
-  pending "tests_die_custom_error_code_two_args" do
-    assert_stderr(/Error: issue with parsing/) do
-      assert_system_exit(5) do
-        Optimist.options [] of String
-        Optimist.die "issue with parsing", 5
+    it "tests_educate_without_options_ever_run" do
+      #Signal::QUIT.trap do # expect_raises(System::Exit) {
+      sio = IO::Memory.new
+      ex = expect_raises(ArgumentError) do
+        Optimist.educate(sio)
       end
-    end
-  end
+      
+      #end
 
-  it "tests_educate_without_options_ever_run" do
-    Signal::QUIT.trap do # expect_raises(System::Exit) {
-      Optimist.educate
     end
 
-  end
-
-  pending "tests_educate" do
-    assert_stdout(/Show this message/) do
-      assert_system_exit(0) do
-        Optimist.options [] of String
-        Optimist.educate
+    it "tests_educate" do
+      sio = IO::Memory.new
+      ex = expect_raises(SystemExit) do
+        Optimist.options([] of String) {}
+        Optimist.educate(sio)
       end
+      ex.error_code.should eq 0
+      sio.to_s.should match /Show this message/
     end
+    
   end
-
 
   describe "with_standard_exception" do
     
     it "has options" do
       px = Parser.new
       px.opt :f
-
-      opts = Optimist.with_standard_exception_handling px do
+      sio = IO::Memory.new
+      opts = Optimist.with_standard_exception_handling(px, stdout: sio) do
         px.parse ["-f"]
       end
-
       opts["f"].value.should be_true
     end
 
-    pending "has version_exception" do
-      p = parser do
-        version "5.5"
-      end
-
-      assert_stdout(/5\.5/) do
-        assert_system_exit(0) do
-          Optimist.with_standard_exception_handling px do
-            raise VersionNeeded
-          end
+    it "has a version exception" do
+      px = Parser.new
+      px.version "5.5"
+      sio = IO::Memory.new
+      ex = expect_raises(SystemExit) do
+        Optimist.with_standard_exception_handling(px, stdout: sio) do
+          raise VersionNeeded.new
         end
       end
+      ex.error_code.should eq 0
+      sio.to_s.should eq "5.5\n"
     end
 
-    pending "has version_flag" do
-      px = parser do
-        version "5.5"
-      end
-
-      assert_stdout(/5\.5/) do
-        assert_system_exit(0) do
-          Optimist.with_standard_exception_handling px do
-            p.parse %w(-v)
-          end
+    it "has a version flag" do
+      px = Parser.new
+      px.version "5.5"
+      sio = IO::Memory.new
+      ex = expect_raises(SystemExit) do
+        Optimist.with_standard_exception_handling(px, stdout: sio) do
+          px.parse %w(-v)
         end
       end
+      ex.error_code.should eq 0
+      sio.to_s.should eq "5.5\n"
     end
 
-    pending "has die_exception" do
-      assert_stderr(/Error: cl error/) do
-        assert_system_exit(-1) do
-          px = parser
-          Optimist.with_standard_exception_handling(px) do
-            raise CommandlineError.new("cl error")
-          end
+    it "has die_exception" do
+      px = Parser.new
+      sio = IO::Memory.new
+      ex = expect_raises(SystemExit) do
+        Optimist.with_standard_exception_handling(px, stderr: sio) do
+          raise CommandlineError.new("cl error")
         end
       end
+      ex.error_code.should eq -1
+      sio.to_s.should match /Error: cl error/
     end
 
-    pending "has die_exception_custom_error" do
-      assert_stderr(/Error: cl error/) do
-        assert_system_exit(5) do
-          px = parser
-          Optimist.with_standard_exception_handling(px) do
-            raise CommandlineError.new("cl error", 5)
-          end
+    it "can die_ex with a nondefault error_code" do
+      px = Parser.new
+      sio = IO::Memory.new
+      ex = expect_raises(SystemExit) do
+        Optimist.with_standard_exception_handling(px, stderr: sio) do
+          raise CommandlineError.new("cl five", 5)
         end
       end
+      ex.error_code.should eq 5
+      sio.to_s.should match /Error: cl five/
     end
 
-    pending "can die" do
-      assert_stderr(/Error: cl error/) do
-        assert_system_exit(-1) do
-          px = parser
-          Optimist.with_standard_exception_handling(px) do
-            px.die "cl error"
-          end
+    it "can die" do
+      px = Parser.new
+      sio = IO::Memory.new
+      ex = expect_raises(SystemExit) do
+        Optimist.with_standard_exception_handling(px, stderr: sio) do
+          px.die "cl error", stderr: sio
         end
       end
+      ex.error_code.should eq -1
+      sio.to_s.should match /Error: cl error/
     end
 
-    pending "has a die_custom_error" do
-      assert_stderr(/Error: cl error/) do
-        assert_system_exit(3) do
-          px = parser
-          Optimist.with_standard_exception_handling(px) do
-            px.die "cl error", nil, 3
-          end
+
+    it "can die with a custom error" do
+      px = Parser.new
+      sio = IO::Memory.new
+      ex = expect_raises(SystemExit) do
+        Optimist.with_standard_exception_handling(px, stderr: sio) do
+          px.die "cl error", nil, 3, stderr: sio
         end
       end
+      ex.error_code.should eq 3
+      sio.to_s.should match /Error: cl error/
     end
 
-    pending "has a help_needed" do
-      assert_stdout(/Options/) do
-        assert_system_exit(0) do
-          px = parser
-          Optimist.with_standard_exception_handling(px) do
-            raise HelpNeeded.new(parser: px)
-          end
+    it "has a help_needed" do
+      px = Parser.new
+      sio = IO::Memory.new
+      ex = expect_raises(SystemExit) do
+        Optimist.with_standard_exception_handling(px, stdout: sio) do
+          raise HelpNeeded.new(parser: px)
         end
       end
+      ex.error_code.should eq 0
+      sio.to_s.should match /Options/
     end
 
-    pending "has a help_needed_flag" do
-      assert_stdout(/Options/) do
-        assert_system_exit(0) do
-          px = parser
-          Optimist.with_standard_exception_handling(px) do
-            px.parse(%w(-h))
-          end
+    it "has a help_needed_flag" do
+      px = Parser.new
+      sio = IO::Memory.new
+      ex = expect_raises(SystemExit) do
+        Optimist.with_standard_exception_handling(px, stdout: sio) do
+          px.parse(%w(-h))
         end
       end
+      ex.error_code.should eq 0
+      sio.to_s.should match /Options/
     end
 
   end
