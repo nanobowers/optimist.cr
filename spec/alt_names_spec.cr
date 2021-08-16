@@ -32,7 +32,7 @@ describe Optimist do
     end
 
     it "tests_altshort_with_multi" do
-      parser.opt :flag, "desc", short: ["-c", 'C', :x], multi: true
+      parser.opt :flag, "desc", short: ["-c", 'C', "x"], multi: true
       parser.opt :num, "desc", short: ["-n", 'N'], cls: Int32ArrayOpt
       parser.parse %w(-c)
       parser.parse %w(-C -c -x)
@@ -51,7 +51,7 @@ describe Optimist do
       parser.opt :goodarg0, "desc", alt: "zero"
       parser.opt :goodarg1, "desc", long: "newone", alt: "one"
       parser.opt :goodarg2, "desc", alt: "--two"
-      parser.opt :goodarg3, "desc", alt: ["three", "--four", :five]
+      parser.opt :goodarg3, "desc", alt: ["three", "--four", "five"]
 
       [%w[--goodarg0], %w[--zero]].each do |a|
         opts = parser.parse(a)
@@ -91,9 +91,9 @@ describe Optimist do
 
     
     it "tests_altlong_help" do
-      parser.opt :cat, "a cat", alt: :feline
-      parser.opt :dog, "a dog", alt: ["Pooch", :canine]
-      parser.opt :fruit, "a fruit", long: :fig, alt: ["peach", :pear, "--apple"], short: false
+      parser.opt :cat, "a cat", alt: "feline"
+      parser.opt :dog, "a dog", alt: ["Pooch", "canine"]
+      parser.opt :fruit, "a fruit", long: "fig", alt: ["peach", "pear", "--apple"], short: false
 
       outstring = get_help_string(parser)
 
@@ -108,31 +108,31 @@ describe Optimist do
     it "tests_alt_duplicates" do
       # alt duplicates named option
       expect_raises(ArgumentError) {
-        parser.opt :cat, "desc", alt: :cat
+        parser.opt :cat, "desc", alt: "cat"
       }
       # alt duplicates :long 
       expect_raises(ArgumentError) {
-        parser.opt :cat, "desc", long: :feline, alt: [:feline]
+        parser.opt :cat, "desc", long: "feline", alt: ["feline"]
       }
       # alt duplicates itself
       expect_raises(ArgumentError) {
-        parser.opt :abc, "desc", alt: [:aaa, :aaa]
+        parser.opt :abc, "desc", alt: ["aaa", "aaa"]
       }
     end
     
     it "tests_altlong_collisions" do
       parser.opt :fat, "desc"
-      parser.opt :raton, "desc", long: :rat
-      parser.opt :bat, "desc", alt: [:baton, :twirl]
+      parser.opt :raton, "desc", long: "rat"
+      parser.opt :bat, "desc", alt: ["baton", "twirl"]
 
       # :alt collision with named option
       expect_raises(ArgumentError) {
-        parser.opt :cat, "desc", alt: :fat
+        parser.opt :cat, "desc", alt: "fat"
       }
 
       # :alt collision with :long option
       expect_raises(ArgumentError) {
-        parser.opt :cat, "desc", alt: :rat
+        parser.opt :cat, "desc", alt: "rat"
       }
 
       # :named option collision with existing :alt option

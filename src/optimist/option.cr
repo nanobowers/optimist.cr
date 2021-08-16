@@ -62,13 +62,14 @@ module Optimist
     # | 0        | 0         | formerly flag?==true (option without any arguments)
     # | 1        | 1         | formerly single_arg?==true (single-parameter/normal option)
     # | 1        | >1        | formerly multi_arg?==true 
-    # | ?        | ?         | presumably illegal condition. untested.
     
     ## TODO: push into SHORT
     def doesnt_need_autogen_short ; !short.auto || !short.chars.empty? ; end
 
 
-    # provide type-format string.  default to empty, but user should probably override it
+    # Provide type-format string.
+    # Default to empty, but should probably be overridden for most
+    # subclasses.
     def type_format ; "" ; end
 
     def educate
@@ -195,7 +196,11 @@ module Optimist
           opt_inst = Float64Opt.new(name, desc, default)
         elsif default.is_a?(IO::FileDescriptor)
           opt_inst = FileOpt.new(name, desc, default)
-        else # nil??
+        else
+          
+          # No class and no default given, so this is an implicit
+          # flag (BoolOpt)
+          
           opt_inst = BoolOpt.new(name, desc, default.nil? ? false : default.as(Bool))
         end
       else
@@ -205,13 +210,13 @@ module Optimist
       opt_inst.long.set(name, long, alt)   ## fill in long/alt opts
       opt_inst.short.add short             ## fill in short opts
 
-      ## fill in permitted values
+      ## Fill in permitted values
       opt_inst.permitted = permitted.as(PermittedType)
       opt_inst.permitted_response = permitted_response if permitted_response
       opt_inst.name = name
       opt_inst.required = required
 
-      ## set multi (affects BoolOpt only)
+      ## Set multi (affects BoolOpt only)
       if opt_inst.is_a?(BoolOpt)
         opt_inst.multi = multi
       end
@@ -221,29 +226,6 @@ module Optimist
       return opt_inst # some sort of Option
     end
 
-    def self.handle_long_opt(lopt, name)
-      lopt = lopt ? lopt.to_s : name.to_s.gsub("_", "-")
-      lopt = case lopt
-             when /^--([^-].*)$/ then $1
-             when /^[^-]/        then lopt
-             else                     raise ArgumentError.new("invalid long option name #{lopt.inspect}")
-             end
-    end
-
-    def self.handle_short_opt(sopt)
-      sopt = sopt.to_s if sopt && sopt != false
-      sopt = case sopt
-             when /^-(.)$/          then $1
-             when nil, false, /^.$/ then sopt
-             else                   raise ArgumentError.new("invalid short option name '#{sopt.inspect}'")
-             end
-
-      if sopt
-        raise ArgumentError.new("a short option name can't be a number or a dash") if sopt =~ ::Optimist::Parser::INVALID_SHORT_ARG_REGEX
-      end
-      return sopt
-    end
-    
   end
 
   ################################################
