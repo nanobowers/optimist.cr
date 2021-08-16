@@ -11,24 +11,21 @@ def get_help_string(parser)
   sio.to_s
 end
 
-
 describe Optimist do
-
   parser = Optimist::Parser.new
   Spec.before_each do
     parser = Optimist::Parser.new
   end
 
   describe "AlternateNames" do
-
     it "tests_altshort" do
-       parser.opt :catarg, "desc", short: ["c", "-C"]
-       opts = parser.parse %w(-c)
-       opts["catarg"].value.should be_true
-       opts = parser.parse %w(-C)
-       opts["catarg"].value.should be_true
-       expect_raises(CommandlineError) { parser.parse %w(-c -C) }
-       expect_raises(CommandlineError) { parser.parse %w(-cC) }
+      parser.opt :catarg, "desc", short: ["c", "-C"]
+      opts = parser.parse %w(-c)
+      opts["catarg"].value.should be_true
+      opts = parser.parse %w(-C)
+      opts["catarg"].value.should be_true
+      expect_raises(CommandlineError) { parser.parse %w(-c -C) }
+      expect_raises(CommandlineError) { parser.parse %w(-cC) }
     end
 
     it "tests_altshort_with_multi" do
@@ -57,18 +54,18 @@ describe Optimist do
         opts = parser.parse(a)
         opts["goodarg0"].value.should be_true
       end
-      
-      [%w[--newone], %w[-n], %w[--one]].each  do |a|
+
+      [%w[--newone], %w[-n], %w[--one]].each do |a|
         opts = parser.parse(a)
         opts["goodarg1"].value.should be_true
       end
 
-      [%w[--two]].each  do |a|
+      [%w[--two]].each do |a|
         opts = parser.parse(a)
         opts["goodarg2"].value.should be_true
       end
 
-      [%w[--three], %w[--four], %w[--five]].each  do |a|
+      [%w[--three], %w[--four], %w[--five]].each do |a|
         opts = parser.parse(a)
         opts["goodarg3"].value.should be_true
       end
@@ -81,15 +78,14 @@ describe Optimist do
         expect_raises(ArgumentError) { parser.opt :badarg, "desc", alt: altitem }
       end
     end
-    
+
     it "tests_altshort_help" do
-      parser.opt :cat, "cat", short: ['c','C','a','T']
+      parser.opt :cat, "cat", short: ['c', 'C', 'a', 'T']
       outstring = get_help_string(parser)
       # expect mutliple short-opts to be in the help
       outstring.should match(/-c, -C, -a, -T, --cat/)
     end
 
-    
     it "tests_altlong_help" do
       parser.opt :cat, "a cat", alt: "feline"
       parser.opt :dog, "a dog", alt: ["Pooch", "canine"]
@@ -102,7 +98,6 @@ describe Optimist do
 
       # expect long-opt to shadow the actual name
       outstring.should match(/--fig, --peach, --pear, --apple/)
-      
     end
 
     it "tests_alt_duplicates" do
@@ -110,7 +105,7 @@ describe Optimist do
       expect_raises(ArgumentError) {
         parser.opt :cat, "desc", alt: "cat"
       }
-      # alt duplicates :long 
+      # alt duplicates :long
       expect_raises(ArgumentError) {
         parser.opt :cat, "desc", long: "feline", alt: ["feline"]
       }
@@ -119,7 +114,7 @@ describe Optimist do
         parser.opt :abc, "desc", alt: ["aaa", "aaa"]
       }
     end
-    
+
     it "tests_altlong_collisions" do
       parser.opt :fat, "desc"
       parser.opt :raton, "desc", long: "rat"
@@ -144,7 +139,6 @@ describe Optimist do
       expect_raises(ArgumentError) {
         parser.opt :whirl, "desc", long: "twirl"
       }
-      
     end
   end
 end

@@ -8,6 +8,4 @@ opts = Optimist.options do
   opt :anteater, "Eats ants"
 end
 
-
-opts.each { |k,v| p [k, v.value, v.given?] }
-
+opts.each { |k, v| p [k, v.value, v.given?] }

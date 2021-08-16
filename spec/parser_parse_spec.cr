@@ -2,20 +2,19 @@ require "./spec_helper"
 
 include Optimist
 describe Optimist::Parser do
-
   parser = Optimist::Parser.new
   Spec.before_each do
     parser = Optimist::Parser.new
   end
-  
+
   # TODO: parse
-    # resolve_default_short_options!
-    # parse_date_parameter
-    # parse_integer_parameter(param, arg)
-    # parse_float_parameter(param, arg)
-    # parse_io_parameter(param, arg)
-    # each_arg
-      # collect_argument_parameters
+  # resolve_default_short_options!
+  # parse_date_parameter
+  # parse_integer_parameter(param, arg)
+  # parse_float_parameter(param, arg)
+  # parse_io_parameter(param, arg)
+  # each_arg
+  # collect_argument_parameters
 
   it "has help_needed" do
     parser.opt :arg
@@ -72,5 +71,4 @@ describe Optimist::Parser do
     parser.version "1.1"
     expect_raises(VersionNeeded) { parser.parse %w(--arg1 --version) }
   end
-
 end

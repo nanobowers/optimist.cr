@@ -15,18 +15,16 @@ def helplines(parser)
 end
 
 describe Optimist do
-  
   describe "ParserEducate" do
-    
     parser = Parser.new
     Spec.before_each do
       parser = Parser.new
     end
 
     it "tests_no_arguments_to_stdout" do
-      #assert_stdout(/Options:/) do
-        parser.educate
-      #end
+      # assert_stdout(/Options:/) do
+      parser.educate
+      # end
     end
 
     it "tests_argument_to_stringio" do
@@ -42,18 +40,17 @@ describe Optimist do
       assert_educates(parser, /^Usage: \S* usage string\n\nOptions:/)
     end
 
-#    it "tests_usage_synopsis_version" do
-#    end
+    #    it "tests_usage_synopsis_version" do
+    #    end
 
     # def test_banner
     # def test_text
 
-      # width, legacy_width
-      # wrap
-      # wrap_lines
+    # width, legacy_width
+    # wrap
+    # wrap_lines
 
     describe "help" do
-      
       it "has a default_banner" do
         parser = Parser.new
         parser.parse([] of String)
@@ -82,7 +79,7 @@ describe Optimist do
         parser.parse([] of String)
         help = helplines(parser)
         help[0].should match(/OPTIONS FILES/i)
-        help.size.should eq 4  # line break, options, then -h
+        help.size.should eq 4 # line break, options, then -h
       end
 
       it "has an optional synopsis" do
@@ -91,7 +88,7 @@ describe Optimist do
         parser.parse([] of String)
         help = helplines(parser)
         help[0].should match(/About this program/i)
-        help.size.should eq 4  # line break, options, then -h
+        help.size.should eq 4 # line break, options, then -h
       end
 
       it "has a specific order for usage and synopsis" do
@@ -102,7 +99,7 @@ describe Optimist do
         help = helplines(parser)
         help[0].should match(/OPTIONS FILES/i)
         help[1].should match(/About this program/i)
-        help.size.should eq 5  # line break, options, then -h
+        help.size.should eq 5 # line break, options, then -h
       end
 
       it "preserves order/positions" do
@@ -121,9 +118,9 @@ describe Optimist do
         parser.opt :arg5, "arg", cls: Float64Opt
         parser.opt :arg6, "arg", cls: Float64ArrayOpt
         parser.opt :arg7, "arg", cls: FileOpt
-        #parser.opt :arg8, "arg", cls: :ios
-        #parser.opt :arg9, "arg", cls: :date
-        #parser.opt :arg10, "arg", cls: :dates
+        # parser.opt :arg8, "arg", cls: :ios
+        # parser.opt :arg9, "arg", cls: :date
+        # parser.opt :arg10, "arg", cls: :dates
         help = helplines(parser)
         help[1].should match(/<i>/)
         help[2].should match(/<i\+>/)
@@ -132,9 +129,9 @@ describe Optimist do
         help[5].should match(/<f>/)
         help[6].should match(/<f\+>/)
         help[7].should match(/<filename\/uri>/)
-        #help[8].should match(/<filename\/uri\+>/)
-        #help[9].should match(/<date>/)
-        #help[10].should match(/<date\+>/)
+        # help[8].should match(/<filename\/uri\+>/)
+        # help[9].should match(/<date>/)
+        # help[10].should match(/<date\+>/)
       end
 
       it "has a default text" do
@@ -144,8 +141,6 @@ describe Optimist do
         help[1].should match(/Default/)
         help[2].should match(/Default/)
       end
-
     end
-    
   end
 end

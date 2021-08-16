@@ -1,4 +1,3 @@
-#!/usr/bin/env ruby
 require "../src/optimist"
 include Optimist
 opts = Optimist.options do
@@ -10,4 +9,4 @@ opts = Optimist.options do
   opt :brand, "brand name of the liquid", cls: StringOpt
 end
 
-opts.each { |k,v| p [k, v.value, v.given?] }
+opts.each { |k, v| p [k, v.value, v.given?] }

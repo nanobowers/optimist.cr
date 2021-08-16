@@ -3,6 +3,7 @@ require "../src/optimist"
 class ZipCode
   def initialize(@zip : String, @plusfour : String)
   end
+
   def inspect
     @zip + "-" + @plusfour
   end
@@ -13,8 +14,14 @@ class ZipCodeOpt < Optimist::Option
   @default : ZipCode?
   getter :default
   setter :value
-  def value ; @default || @value ; end
-  def type_format ; "=<zip>" ; end # For use with help-message
+
+  def value
+    @default || @value
+  end
+
+  def type_format
+    "=<zip>"
+  end # For use with help-message
   def add_argument_value(paramlist : Array(String), _neg_given)
     param = paramlist.first
     matcher = ZIP_REGEX.match(param)

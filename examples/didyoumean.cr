@@ -1,4 +1,3 @@
-#!/usr/bin/env ruby
 require "../src/optimist"
 
 opts = Optimist.options do
@@ -8,5 +7,4 @@ opts = Optimist.options do
   opt :big_bug, "Madagascar cockroach"
 end
 
-opts.each { |k,v| p [k, v.value, v.given?] }
-
+opts.each { |k, v| p [k, v.value, v.given?] }

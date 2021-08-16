@@ -3,21 +3,21 @@ require "./spec_helper"
 include Optimist
 
 module Optimist
-  def self.reset_last_parser ; @@last_parser = nil ; end
+  def self.reset_last_parser
+    @@last_parser = nil
+  end
 end
 
 describe Optimist do
-
   describe "module functions" do
-    
     parser = Parser.new
-    
+
     Spec.before_each do
       parser = Parser.new
       Optimist.disable_exit
       Optimist.reset_last_parser
     end
-    
+
     Spec.after_each do
       Optimist.enable_exit
     end
@@ -62,7 +62,7 @@ describe Optimist do
     it "tests_die" do
       sio = IO::Memory.new
       ex = expect_raises(SystemExit) {
-        Optimist.options([] of String) {}
+        Optimist.options([] of String) { }
         Optimist.die "issue with parsing", stderr: sio
       }
       ex.error_code.should eq -1
@@ -72,17 +72,17 @@ describe Optimist do
     it "tests_die_custom_error_code" do
       sio = IO::Memory.new
       ex = expect_raises(SystemExit) do
-        Optimist.options([] of String) {}
+        Optimist.options([] of String) { }
         Optimist.die "issue with parsing", nil, 5, stderr: sio
       end
       ex.error_code.should eq 5
       sio.to_s.should match /Error: issue with parsing/
     end
 
-    it "tests_die_custom_error_code_two_args" do 
+    it "tests_die_custom_error_code_two_args" do
       sio = IO::Memory.new
       ex = expect_raises(SystemExit) do
-        Optimist.options([] of String) {}
+        Optimist.options([] of String) { }
         Optimist.die "issue with parsing", 5, stderr: sio
       end
       ex.error_code.should eq 5
@@ -90,30 +90,27 @@ describe Optimist do
     end
 
     it "tests_educate_without_options_ever_run" do
-      #Signal::QUIT.trap do # expect_raises(System::Exit) {
+      # Signal::QUIT.trap do # expect_raises(System::Exit) {
       sio = IO::Memory.new
       ex = expect_raises(ArgumentError) do
         Optimist.educate(sio)
       end
-      
-      #end
 
+      # end
     end
 
     it "tests_educate" do
       sio = IO::Memory.new
       ex = expect_raises(SystemExit) do
-        Optimist.options([] of String) {}
+        Optimist.options([] of String) { }
         Optimist.educate(sio)
       end
       ex.error_code.should eq 0
       sio.to_s.should match /Show this message/
     end
-    
   end
 
   describe "with_standard_exception" do
-    
     it "has options" do
       px = Parser.new
       px.opt :f
@@ -186,7 +183,6 @@ describe Optimist do
       sio.to_s.should match /Error: cl error/
     end
 
-
     it "can die with a custom error" do
       px = Parser.new
       sio = IO::Memory.new
@@ -222,7 +218,5 @@ describe Optimist do
       ex.error_code.should eq 0
       sio.to_s.should match /Options/
     end
-
   end
-  
 end

@@ -1,4 +1,3 @@
-#!/usr/bin/env ruby
 require "../src/optimist"
 
 opts = Optimist.options do
@@ -14,4 +13,3 @@ end
 
 Optimist.die "drinkers", "must be value a greater than zero" if opts["drinkers"].value.as(Int32) < 1
 Optimist.die "config", "must point to an existing file" unless File.exists?(opts["config"].value.as(String)) if opts["config"].value
-

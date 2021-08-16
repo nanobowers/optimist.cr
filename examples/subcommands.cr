@@ -1,7 +1,6 @@
-#!/usr/bin/env ruby
 require "../src/optimist"
 
-result = Optimist.options do 
+result = Optimist.options do
   opt :global_flag, "Some global flag"
   subcmd :list, "Show the to-do list" do
     opt :recent, "list only N-recent items", type: Integer, default: 5

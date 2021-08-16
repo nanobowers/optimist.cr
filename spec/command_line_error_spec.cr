@@ -7,10 +7,7 @@ private def cle(*args)
 end
 
 describe Optimist do
-
   describe CommandlineError do
-  
-
     it "is a class" do
       cle("message").should be_a Exception
     end
@@ -23,10 +20,8 @@ describe Optimist do
       cle("message").error_code.should be_nil
     end
 
-    
     it "takes a custom error code" do
       cle("message", -3).error_code.should eq(-3)
     end
-
   end
 end

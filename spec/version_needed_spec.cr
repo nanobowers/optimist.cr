@@ -8,8 +8,6 @@ end
 
 describe Optimist do
   describe VersionNeeded do
-
-
     it "is an exception" do
       vn("message").should be_a Exception
     end
@@ -17,6 +15,5 @@ describe Optimist do
     it "makes a message" do
       vn("message").message.should eq "message"
     end
-
   end
 end

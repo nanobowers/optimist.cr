@@ -3,14 +3,12 @@ require "./spec_helper"
 include Optimist
 
 describe Optimist do
-  
   describe StringFlagOpt do
-
     parser = Parser.new
     Spec.before_each do
       parser = Parser.new
     end
-    
+
     # in this case, the stringflag should return false
     it "works when unset" do
       parser.opt :xyz, "desc", cls: StringFlagOpt
@@ -28,11 +26,11 @@ describe Optimist do
       parser.opt :xyz, "desc", cls: StringFlagOpt
       parser.opt :abc, "desc", cls: BoolOpt
 
-      opts = parser.parse %w(--xyz )
+      opts = parser.parse %w(--xyz)
       opts["xyz"].given?.should be_true
       opts["xyz"].value.should be_true
       opts["abc"].value.should be_false
-      
+
       opts = parser.parse %w(--xyz --abc)
       opts["xyz"].given?.should be_true
       opts["xyz"].value.should be_true
@@ -72,10 +70,9 @@ describe Optimist do
       opts["log"].value.should eq "other.log"
     end
 
-    
     it "works without a default" do
       parser.opt :log, "desc", cls: StringFlagOpt
-        
+
       opts = parser.parse([] of String)
       opts["log"].given?.should be_false
       opts["log"].value.should be_false
@@ -91,9 +88,6 @@ describe Optimist do
       opts = parser.parse %w(--log other.log)
       opts["log"].given?.should be_true
       opts["log"].value.should eq "other.log"
-      
     end
   end
-    
 end
-

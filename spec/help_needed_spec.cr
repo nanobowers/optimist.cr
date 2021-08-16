@@ -8,16 +8,14 @@ end
 
 describe Optimist do
   describe HelpNeeded do
-
     it "is a class" do
-      par = Parser.new()
+      par = Parser.new
       hn(par).should be_a Exception
     end
 
     it "has a message" do
-      par = Parser.new()
+      par = Parser.new
       hn(par).message.should eq ""
     end
-
   end
 end
