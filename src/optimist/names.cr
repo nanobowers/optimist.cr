@@ -22,13 +22,12 @@ module Optimist
       @long.to_s
     end
 
-    def set(name : LongNameType, lopt : LongNameType, alts : AlternatesType)
-      @truename = name.to_s
+    def set(@truename : String, lopt : LongNameType, alts : AlternatesType)
       valid_lopt = case lopt
                    in String
                      lopt.to_s
                    in Nil
-                     name.to_s.gsub("_", "-")
+                     @truename.to_s.gsub("_", "-")
                    end
       @long = make_valid(valid_lopt)
       @alts = case alts
@@ -62,7 +61,8 @@ module Optimist
       @auto = true
     end
 
-    def add(value : ShortArg)
+    # Overload for char/string
+    def add(value : SingleShortNameType)
       sopt = case (strval = value.to_s)
              when /^-(.)$/ then $1
              when /^.$/    then strval
@@ -75,7 +75,7 @@ module Optimist
       @chars << sopt
     end
 
-    # Overload for true/false values:
+    # Overload for true/false values
     def add(value : Bool?)
       case value
       in true
@@ -88,8 +88,8 @@ module Optimist
       end
     end
 
-    # Handle an Array of ShortArgs
-    def add(values : ShortArgs)
+    # Handle an Array of Char/String
+    def add(values : MultiShortNameType)
       values.each { |v| add(v) }
     end
   end

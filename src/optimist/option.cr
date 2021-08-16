@@ -16,24 +16,17 @@ module Optimist
     @callback : Option -> Nil
     @desc : String
     @given : Bool
-    @arguments_applied : Int32
 
-    def initialize(name, @desc, default : T) forall T
+    def initialize(@name, @desc, @default : T) forall T
       @long = LongNames.new
       # can be an Array of one-char strings, a one-char String, nil or false
       @short = ShortNames.new
       @callback = ->(x : Option) {}
-      @name = "__unknown__"
-      # @desc = ""
       @hidden = false
-      @default = default
       @permitted = nil
       @permitted_response = "option '%{arg}' only accepts %{valid_string}"
       @required = false
-      @arguments_applied = 0
       @min_args = 1
-      # note: maximum max_args is likely ~~ 128*1024, as
-      # linux MAX_ARG_STRLEN is 128kiB
       @max_args = 1
 
       # Was the option given or not. SET BY *PARSE*
@@ -162,7 +155,7 @@ module Optimist
       end
     end
 
-    # incoming values from the command-line should be strings, so we should
+    # Incoming values from the command-line should be strings, so we should
     # stringify any permitted types as the basis of comparison.
     def permitted_value?(val : DefaultType) : Bool
       valstr = val.to_s
@@ -178,11 +171,12 @@ module Optimist
       end
     end
 
-    # # Factory class method
+    # Factory class method
     # Determines which type of object to create based on arguments passed
     # to +Optimist::opt+.  This is tricky because we allow the +default:+
     # to be able to set the option's type.
-    def self.create(name, desc,
+    def self.create(name : String,
+                    desc : String,
                     cls : Class? = nil,
                     long : LongNameType = nil,
                     alt : AlternatesType = nil,
@@ -192,7 +186,7 @@ module Optimist
                     permitted : PermittedType = nil,
                     permitted_response : String? = nil,
                     required : Bool = false,
-                    **opts, &block : Option -> Nil)
+                    **kwargs, &block : Option -> Nil)
       if cls.is_a?(Nil)
         if default.is_a?(Int32)
           opt_inst = Int32Opt.new(name, desc, default)
@@ -209,8 +203,8 @@ module Optimist
         else
           # No class and no default given, so this is an implicit
           # flag (BoolOpt)
-
-          opt_inst = BoolOpt.new(name, desc, default.nil? ? false : default.as(Bool))
+          booldefault = default.nil? ? false : default.as(Bool)
+          opt_inst = BoolOpt.new(name, desc, booldefault)
         end
       else
         opt_inst = cls.new(name, desc, default)
@@ -222,7 +216,6 @@ module Optimist
       # # Fill in permitted values
       opt_inst.permitted = permitted.as(PermittedType)
       opt_inst.permitted_response = permitted_response if permitted_response
-      opt_inst.name = name
       opt_inst.required = required
 
       # # Set multi (affects BoolOpt only)

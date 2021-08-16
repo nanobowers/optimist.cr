@@ -6,8 +6,8 @@ module Optimist
   alias LongNameType = String?
   alias AlternatesType = (Array(String) | String | Nil)
 
-  alias ShortNameType = (Array(String | Char) | String | Char | Bool | Nil)
+  alias SingleShortNameType = String | Char
+  alias MultiShortNameType = Array(String | Char)
+  alias ShortNameType = ( MultiShortNameType | SingleShortNameType | Bool | Nil)
 
-  alias ShortArg = String | Char
-  alias ShortArgs = Array(String | Char)
 end
