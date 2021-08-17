@@ -1,50 +1,60 @@
 module Optimist
+  
+  alias CbType = (Option -> Nil) | Nil
+
   abstract class Option
     abstract def default
     abstract def add_argument_value(a : Array(String), b : Bool)
     abstract def value
 
+    getter :desc
+    getter :long
+    getter :name
+    getter :permitted
+    getter :permitted_response
     getter :short
-    property :name, :long, :permitted, :permitted_response
-    property :callback, :desc
-    property? :required
     getter? :given
+    getter? :required
 
     # defaults
-    @name : String
-    @permitted : PermittedType
-    @callback : Option -> Nil
-    @desc : String
     @given : Bool
+    def initialize(@name : String, @desc : String, @default : T,
+                   long : LongNameType = nil,
+                   alt : AlternatesType = nil,
+                   short : ShortNameType = nil,
+                   @permitted : PermittedType = nil,
+                   @callback : ((Option -> Nil) | Nil) = nil,
+                   @permitted_response : String = "option '%{arg}' only accepts %{valid_string}",
+                   @required : Bool = false,
+                   @hidden : Bool = false
+                  ) forall T
+      
+      @long = LongNames.new(name, long, alt)
+      @short = ShortNames.new(short)
 
-    def initialize(@name, @desc, @default : T) forall T
-      @long = LongNames.new
-      # can be an Array of one-char strings, a one-char String, nil or false
-      @short = ShortNames.new
-      @callback = ->(x : Option) {}
-      @hidden = false
-      @permitted = nil
-      @permitted_response = "option '%{arg}' only accepts %{valid_string}"
-      @required = false
       @min_args = 1
       @max_args = 1
 
-      # Was the option given or not. SET BY *PARSE*
+      # Was the option given or not.
       @given = false
     end
 
     def needs_an_argument
       true
     end # flag-like options do not need arguments
+    
     def takes_an_argument
       true
     end # flag-only options do not take an argument
+    
     def takes_multiple
       @max_args > 1
     end # overridden in array-versions
 
     def trigger_callback
-      @callback.call(self)
+      if !@callback.nil?
+        @callback.as(Option->Nil).call(self)
+      end
     end
 
     def disallow_multiple_args(paramlist : Array(String))
@@ -54,12 +64,6 @@ module Optimist
     end
 
     getter :min_args, :max_args
-
-    # |@min_args | @max_args |
-    # +----------+-----------+
-    # | 0        | 0         | formerly flag?==true (option without any arguments)
-    # | 1        | 1         | formerly single_arg?==true (single-parameter/normal option)
-    # | 1        | >1        | formerly multi_arg?==true
 
     # # TODO: push into SHORT
     def doesnt_need_autogen_short
@@ -80,7 +84,8 @@ module Optimist
       optionlist.compact.join(", ") + type_format + (min_args == 0 && default ? ", --no-#{long.to_s}" : "")
     end
 
-    # # Format the educate-line description including the default and permitted value(s)
+    # Format the educate-line description including the
+    # default and permitted value(s)
     def full_description
       desc_str = desc
       desc_str = description_with_default desc_str if default
@@ -94,7 +99,7 @@ module Optimist
       when STDOUT then "<stdout>"
       when STDIN  then "<stdin>"
       when STDERR then "<stderr>"
-      else             obj # pass-through-case
+      else obj # pass-through-case
       end
     end
 
@@ -178,52 +183,30 @@ module Optimist
     def self.create(name : String,
                     desc : String,
                     cls : Class? = nil,
-                    long : LongNameType = nil,
-                    alt : AlternatesType = nil,
-                    short : ShortNameType = nil,
-                    multi : Bool = false,
                     default : _ = nil,
-                    permitted : PermittedType = nil,
-                    permitted_response : String? = nil,
-                    required : Bool = false,
-                    **kwargs, &block : Option -> Nil)
+                    **kwargs)
       if cls.is_a?(Nil)
         if default.is_a?(Int32)
-          opt_inst = Int32Opt.new(name, desc, default)
+          opt_inst = Int32Opt.new(name, desc, default, **kwargs)
         elsif default.is_a?(Bool)
-          opt_inst = BoolOpt.new(name, desc, default)
+          opt_inst = BoolOpt.new(name, desc, default, **kwargs)
         elsif default.is_a?(String)
-          opt_inst = StringOpt.new(name, desc, default)
+          opt_inst = StringOpt.new(name, desc, default, **kwargs)
         elsif default.is_a?(Array(String))
-          opt_inst = StringArrayOpt.new(name, desc, default)
+          opt_inst = StringArrayOpt.new(name, desc, default, **kwargs)
         elsif default.is_a?(Float)
-          opt_inst = Float64Opt.new(name, desc, default)
+          opt_inst = Float64Opt.new(name, desc, default, **kwargs)
         elsif default.is_a?(IO::FileDescriptor)
-          opt_inst = FileOpt.new(name, desc, default)
+          opt_inst = FileOpt.new(name, desc, default, **kwargs)
         else
           # No class and no default given, so this is an implicit
           # flag (BoolOpt)
           booldefault = default.nil? ? false : default.as(Bool)
-          opt_inst = BoolOpt.new(name, desc, booldefault)
+          opt_inst = BoolOpt.new(name, desc, booldefault, **kwargs)
         end
       else
-        opt_inst = cls.new(name, desc, default)
+        opt_inst = cls.new(name, desc, default, **kwargs)
       end
-
-      opt_inst.long.set(name, long, alt) # # fill in long/alt opts
-      opt_inst.short.add short           # # fill in short opts
-
-      # # Fill in permitted values
-      opt_inst.permitted = permitted.as(PermittedType)
-      opt_inst.permitted_response = permitted_response if permitted_response
-      opt_inst.required = required
-
-      # # Set multi (affects BoolOpt only)
-      if opt_inst.is_a?(BoolOpt)
-        opt_inst.multi = multi
-      end
-
-      opt_inst.callback = block
 
       return opt_inst # some sort of Option
     end
@@ -236,18 +219,16 @@ module Optimist
   # Flag option.  Has no arguments. Can be negated with "no-".
   class BoolOpt < Option
     @value : Bool?
-    @default : Bool?
-    @multi : Bool
+    @default : Bool
 
     property :multi
     getter :default
     setter :value
 
-    def initialize(name, desc, default : Bool?)
-      super
-      @multi = false
+    def initialize(name, desc, default : Bool? = nil, @multi : Bool = false, **kwargs)
+      booldefault = default.nil? ? false : default
+      super(name, desc, booldefault, **kwargs)
       @value = nil
-      @default = default.nil? ? false : default
       @min_args = 0
       @max_args = 0
     end
@@ -281,8 +262,8 @@ module Optimist
     getter :default
     setter :value
 
-    def initialize(name, desc, default : Int32?)
-      super
+    def initialize(name, desc, default : Int32?, **kwargs)
+      super(name, desc, default, **kwargs)
       @value = nil
       @default = default
     end
@@ -316,8 +297,8 @@ module Optimist
     getter :default
     setter :value
 
-    def initialize(name, desc, @default : Float64?)
-      super
+    def initialize(name, desc, default : Float64?, **kwargs)
+      super(name, desc, default, **kwargs)
       @value = nil
     end
 
@@ -357,6 +338,10 @@ module Optimist
       "=<filename/uri>"
     end
 
+    def initialize(name, desc, default : IO?, **kwargs)
+      super(name, desc, default, **kwargs)
+    end
+
     def add_argument_value(paramlist : Array(String), _neg_given)
       param = paramlist.first
       @value = if param =~ /^(stdin|\-)$/i
@@ -380,6 +365,10 @@ module Optimist
     property :value
     getter :default
 
+    def initialize(name, desc, default : String?, **kwargs)
+      super(name, desc, default, **kwargs)
+    end
+    
     def value
       return @value.nil? ? @default : @value
     end
@@ -392,10 +381,10 @@ module Optimist
       @value = paramlist.first
       @given = true
     end
+    
   end
 
-  #
-  class StringFlagOpt < StringOpt
+  class StringFlagOpt < Option
     @value : String?
     @default : String?
     setter :value
@@ -406,9 +395,8 @@ module Optimist
       @value
     end
 
-    def initialize(name, desc, @default : String?)
-      super
-      # @default = default.nil? ? false : default
+    def initialize(name, desc, default : String?, **kwargs)
+      super(name, desc, default, **kwargs)
       @min_args = 0
       @max_args = 1
     end
@@ -461,9 +449,9 @@ module Optimist
       @given = true
     end
 
-    def initialize(name, desc, default : Array(Int32)?)
+    def initialize(name, desc, default : Array(Int32)? = nil, **kwargs)
       # if default is given as nil, set as an empty array.
-      super(name, desc, default || [] of Int32)
+      super(name, desc, default || [] of Int32, **kwargs)
       @value = [] of Int32
       @max_args = 999
     end
@@ -503,9 +491,9 @@ module Optimist
       @given = true
     end
 
-    def initialize(name, desc, default : Array(Float64)?)
+    def initialize(name, desc, default : Array(Float64)? = nil, **kwargs)
       # if default is given as nil, set as an empty array.
-      super(name, desc, default || [] of Float64)
+      super(name, desc, default  || [] of Float64, **kwargs)
       @value = [] of Float64
       @max_args = 999
     end
@@ -541,9 +529,10 @@ module Optimist
       @given = true
     end
 
-    def initialize(name, desc, default : Array(String)?)
+    def initialize(name, desc, default : Array(String)? = nil, **kwargs)
       # if default is given as nil, set as an empty array.
-      super(name, desc, default || [] of String)
+      super(name, desc, default || [] of String, **kwargs)
+      #name, desc, default || [] of String, **kwargs)
       @value = [] of String
       @max_args = 999
     end

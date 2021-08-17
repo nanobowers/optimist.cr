@@ -2,27 +2,9 @@ module Optimist
   class LongNames
     @truename : String?
     @long : String?
-
-    def initialize
-      @truename = nil
-      @long = nil
-      @alts = [] of String
-    end
-
-    def make_valid(lopt : String) : String
-      case lopt
-      when /^--([^-].*)$/ then $1
-      when /^[^-]/        then lopt
-      else
-        raise ArgumentError.new("invalid long option name #{lopt.inspect}")
-      end
-    end
-
-    def to_s : String
-      @long.to_s
-    end
-
-    def set(@truename : String, lopt : LongNameType, alts : AlternatesType)
+    @alts : Array(String)
+    
+    def initialize(@truename : String, lopt : LongNameType, alts : AlternatesType)
       valid_lopt = case lopt
                    in String
                      lopt.to_s
@@ -40,14 +22,29 @@ module Optimist
               end
     end
 
+
+    def make_valid(lopt : String) : String
+      case lopt
+      when /^--([^-].*)$/ then $1
+      when /^[^-]/        then lopt
+      else
+        raise ArgumentError.new("invalid long option name #{lopt.inspect}")
+      end
+    end
+
+    def to_s : String
+      @long.to_s
+    end
+
+
     # long specified with :long has precedence over the true-name
     def long
       @long || @truename.to_s
     end
 
     # all valid names, including alts
-    def names
-      [long] + @alts
+    def names : Array(String)
+      [long.to_s] + @alts
     end
   end
 
@@ -56,9 +53,10 @@ module Optimist
 
     getter :chars, :auto
 
-    def initialize
+    def initialize(value : ShortNameType)
       @chars = [] of String
       @auto = true
+      self.add(value)
     end
 
     # Overload for char/string

@@ -140,15 +140,13 @@ module Optimist
 
     # no-block case
     def opt(name, desc : String = "", **opts)
-      opt(name, desc, **opts) { |x| x }
+      opt(name, desc, **opts) { |x| nil }
     end
 
     def opt(name, desc : String = "", **opts, &block : Option -> Nil)
-      # @myopts = opts
-      # opts[:callback] = b
-      # opts[:desc] = desc
-
-      o = Option.create(name.to_s, desc, **opts, &block)
+      #cb = ->(x : Option) { nil } # block
+      
+      o = Option.create(name.to_s, desc, **opts, callback: block)
 
       raise ArgumentError.new("you already have an argument named '#{name}'") if @specs.has_key? o.name
       o.long.names.each do |lng|
