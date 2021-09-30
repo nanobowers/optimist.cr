@@ -129,7 +129,6 @@ describe Optimist::Parser do
     opts["dd"].value.should eq true
   end
 
-  
   # flags that take an argument error unless given one
   it "tests_argflags_demand_args" do
     parser.opt :goodarg, "desc", cls: StringOpt
@@ -269,16 +268,16 @@ describe Optimist::Parser do
     end
   end
 
-    it "tests ArrayOpts with empty array defaults" do
-      parser.opt :argmi, "desc", cls: Int32ArrayOpt, default: [] of Int32
-      parser.opt :argmf, "desc", cls: Float64ArrayOpt, default: [] of Float64
-      parser.opt :argms, "desc", cls: StringArrayOpt, default: [] of String
-      
-      opts = parser.parse([] of String)
-      opts["argmi"].value.should eq [] of Int32
-      opts["argmf"].value.should eq [] of Float64
-      opts["argms"].value.should eq [] of String
-    end
+  it "tests ArrayOpts with empty array defaults" do
+    parser.opt :argmi, "desc", cls: Int32ArrayOpt, default: [] of Int32
+    parser.opt :argmf, "desc", cls: Float64ArrayOpt, default: [] of Float64
+    parser.opt :argms, "desc", cls: StringArrayOpt, default: [] of String
+
+    opts = parser.parse([] of String)
+    opts["argmi"].value.should eq [] of Int32
+    opts["argmf"].value.should eq [] of Float64
+    opts["argms"].value.should eq [] of String
+  end
 
   it "tests_long_detects_bad_names" do
     parser.opt :goodarg, "desc", long: "none"
@@ -1098,79 +1097,78 @@ EOM
   end
 
   describe "Simple-Interface" do
-  it "handles help" do
-    sio = IO::Memory.new
-    expect_raises(SystemExit) do
-      Optimist.options(%w(-h), stdout: sio) do
+    it "handles help" do
+      sio = IO::Memory.new
+      expect_raises(SystemExit) do
+        Optimist.options(%w(-h), stdout: sio) do
+          opt :potato
+        end
+      end
+      sio.to_s.should match /Options:/
+
+      # ensure regular status is returned
+      ex = expect_raises(SystemExit) do
+        Optimist.options(%w(-h), stdout: sio) do
+          opt :potato
+        end
+      end
+      ex.error_code.should eq 0
+    end
+
+    it "produces a version" do
+      sio = IO::Memory.new
+      ex = expect_raises(SystemExit) do
+        Optimist.options(%w(-v), stdout: sio) do
+          version "1.2"
+          opt :potato
+        end
+      end
+      ex.error_code.should eq 0
+      sio.to_s.should match /1.2/mi
+    end
+
+    it "handles regular usage" do
+      sio = IO::Memory.new
+      opts = Optimist.options(%w(--potato), stdout: sio) do
         opt :potato
       end
+      opts["potato"].value.should eq true
     end
-    sio.to_s.should match /Options:/
 
-    # ensure regular status is returned
-    ex = expect_raises(SystemExit) do
-      Optimist.options(%w(-h), stdout: sio) do
+    it "handles die" do
+      sio = IO::Memory.new
+      opts = Optimist.options(%w(--potato)) do
         opt :potato
       end
+      expect_raises(SystemExit) {
+        Optimist.die(:potato, "is invalid", stderr: sio)
+      }
+      sio.to_s.should match /Error:/
     end
-    ex.error_code.should eq 0
 
-  end
-
-  it "produces a version" do
-    sio = IO::Memory.new
-    ex = expect_raises(SystemExit) do
-      Optimist.options(%w(-v), stdout: sio) do
-        version "1.2"
+    it "handles die without a message" do
+      sio = IO::Memory.new
+      Optimist.options(%w(--potato)) do
         opt :potato
       end
+      expect_raises(SystemExit) {
+        Optimist.die :potato, stderr: sio
+      }
+      sio.to_s.should match /Error:/
     end
-    ex.error_code.should eq 0
-    sio.to_s.should match /1.2/mi
+
+    it "fails with error code on an invalid option" do
+      sio = IO::Memory.new
+      expect_raises(SystemExit) do
+        Optimist.options(%w(--potato), stderr: sio) { }
+      end
+      ex = expect_raises(SystemExit) {
+        Optimist.options(%w(--potato), stderr: sio) { }
+      }
+      ex.error_code.should eq -1
+    end
   end
 
-  it "handles regular usage" do
-    sio = IO::Memory.new
-    opts = Optimist.options(%w(--potato), stdout: sio) do
-      opt :potato
-    end
-    opts["potato"].value.should eq true
-  end
-
-  it "handles die" do
-    sio = IO::Memory.new
-    opts = Optimist.options(%w(--potato)) do
-      opt :potato
-    end
-    expect_raises(SystemExit) {
-      Optimist.die(:potato, "is invalid", stderr: sio)
-    }
-    sio.to_s.should match /Error:/
-  end
-
-  it "handles die without a message" do
-    sio = IO::Memory.new
-    Optimist.options(%w(--potato)) do
-      opt :potato
-    end
-    expect_raises(SystemExit) {
-      Optimist.die :potato, stderr: sio
-    }
-    sio.to_s.should match /Error:/
-  end
-
-  it "fails with error code on an invalid option" do
-    sio = IO::Memory.new
-    expect_raises(SystemExit) do
-      Optimist.options(%w(--potato), stderr: sio) { }
-    end
-    ex = expect_raises(SystemExit) {
-      Optimist.options(%w(--potato), stderr: sio) { }
-    }
-    ex.error_code.should eq -1
-  end
-  end
-  
   describe "callback" do
     it "yields an option to a block" do
       parser.opt "cb1", cls: StringOpt do |o|

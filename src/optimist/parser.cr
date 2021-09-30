@@ -144,8 +144,8 @@ module Optimist
     end
 
     def opt(name, desc : String = "", **opts, &block : Option -> Nil)
-      #cb = ->(x : Option) { nil } # block
-      
+      # cb = ->(x : Option) { nil } # block
+
       o = Option.create(name.to_s, desc, **opts, callback: block)
 
       raise ArgumentError.new("you already have an argument named '#{name}'") if @specs.has_key? o.name

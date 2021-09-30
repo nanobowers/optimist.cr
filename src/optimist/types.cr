@@ -8,6 +8,5 @@ module Optimist
 
   alias SingleShortNameType = String | Char
   alias MultiShortNameType = Array(String | Char)
-  alias ShortNameType = ( MultiShortNameType | SingleShortNameType | Bool | Nil)
-
+  alias ShortNameType = (MultiShortNameType | SingleShortNameType | Bool | Nil)
 end

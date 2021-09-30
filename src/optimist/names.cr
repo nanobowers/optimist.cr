@@ -3,7 +3,7 @@ module Optimist
     @truename : String?
     @long : String?
     @alts : Array(String)
-    
+
     def initialize(@truename : String, lopt : LongNameType, alts : AlternatesType)
       valid_lopt = case lopt
                    in String
@@ -22,7 +22,6 @@ module Optimist
               end
     end
 
-
     def make_valid(lopt : String) : String
       case lopt
       when /^--([^-].*)$/ then $1
@@ -35,7 +34,6 @@ module Optimist
     def to_s : String
       @long.to_s
     end
-
 
     # long specified with :long has precedence over the true-name
     def long

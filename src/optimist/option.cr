@@ -1,5 +1,4 @@
 module Optimist
-  
   alias CbType = (Option -> Nil) | Nil
 
   abstract class Option
@@ -18,6 +17,7 @@ module Optimist
 
     # defaults
     @given : Bool
+
     def initialize(@name : String, @desc : String, @default : T,
                    long : LongNameType = nil,
                    alt : AlternatesType = nil,
@@ -27,9 +27,8 @@ module Optimist
                    @permitted_response : String = "option '%{arg}' only accepts %{valid_string}",
                    @required : Bool = false,
                    @hidden : Bool = false,
-                   @multi : Bool? = nil  # unused except on boolean
-                  ) forall T
-      
+                   @multi : Bool? = nil # unused except on boolean
+                   ) forall T
       @long = LongNames.new(name, long, alt)
       @short = ShortNames.new(short)
 
@@ -43,18 +42,18 @@ module Optimist
     def needs_an_argument
       true
     end # flag-like options do not need arguments
-    
+
     def takes_an_argument
       true
     end # flag-only options do not take an argument
-    
+
     def takes_multiple
       @max_args > 1
     end # overridden in array-versions
 
     def trigger_callback
       if !@callback.nil?
-        @callback.as(Option->Nil).call(self)
+        @callback.as(Option -> Nil).call(self)
       end
     end
 
@@ -100,7 +99,7 @@ module Optimist
       when STDOUT then "<stdout>"
       when STDIN  then "<stdin>"
       when STDERR then "<stderr>"
-      else obj # pass-through-case
+      else             obj # pass-through-case
       end
     end
 
@@ -225,8 +224,8 @@ module Optimist
   ################################################
   ################################################
 
-    # Flag option.  Has no arguments. Can be negated with "no-".
-    # Allows multiple of the same option to be given if multi: is given.
+  # Flag option.  Has no arguments. Can be negated with "no-".
+  # Allows multiple of the same option to be given if multi: is given.
   class BoolOpt < Option
     @value : Bool?
     @default : Bool
@@ -381,7 +380,7 @@ module Optimist
     def initialize(name, desc, default : String?, **kwargs)
       super(name, desc, default, **kwargs)
     end
-    
+
     def value
       return @value.nil? ? @default : @value
     end
@@ -394,7 +393,6 @@ module Optimist
       @value = paramlist.first
       @given = true
     end
-    
   end
 
   class StringFlagOpt < Option
@@ -506,7 +504,7 @@ module Optimist
 
     def initialize(name, desc, default : Array(Float64)? = nil, **kwargs)
       # if default is given as nil, set as an empty array.
-      super(name, desc, default  || [] of Float64, **kwargs)
+      super(name, desc, default || [] of Float64, **kwargs)
       @value = [] of Float64
       @max_args = 999
     end
@@ -545,7 +543,7 @@ module Optimist
     def initialize(name, desc, default : Array(String)? = nil, **kwargs)
       # if default is given as nil, set as an empty array.
       super(name, desc, default || [] of String, **kwargs)
-      #name, desc, default || [] of String, **kwargs)
+      # name, desc, default || [] of String, **kwargs)
       @value = [] of String
       @max_args = 999
     end
