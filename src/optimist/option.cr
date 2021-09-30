@@ -26,7 +26,8 @@ module Optimist
                    @callback : ((Option -> Nil) | Nil) = nil,
                    @permitted_response : String = "option '%{arg}' only accepts %{valid_string}",
                    @required : Bool = false,
-                   @hidden : Bool = false
+                   @hidden : Bool = false,
+                   @multi : Bool? = nil  # unused except on boolean
                   ) forall T
       
       @long = LongNames.new(name, long, alt)
@@ -204,6 +205,14 @@ module Optimist
           booldefault = default.nil? ? false : default.as(Bool)
           opt_inst = BoolOpt.new(name, desc, booldefault, **kwargs)
         end
+      elsif cls.is_a?(Bool.class)
+        opt_inst = BoolOpt.new(name, desc, default.as(Bool?), **kwargs)
+      elsif cls.is_a?(Int32.class)
+        opt_inst = Int32Opt.new(name, desc, default.as(Int32?), **kwargs)
+      elsif cls.is_a?(Float64.class)
+        opt_inst = Float64Opt.new(name, desc, default.as(Float64?), **kwargs)
+      elsif cls.is_a?(String.class)
+        opt_inst = StringOpt.new(name, desc, default.as(String?), **kwargs)
       else
         opt_inst = cls.new(name, desc, default, **kwargs)
       end
@@ -216,21 +225,24 @@ module Optimist
   ################################################
   ################################################
 
-  # Flag option.  Has no arguments. Can be negated with "no-".
+    # Flag option.  Has no arguments. Can be negated with "no-".
+    # Allows multiple of the same option to be given if multi: is given.
   class BoolOpt < Option
     @value : Bool?
     @default : Bool
 
     property :multi
+    property :counter
     getter :default
     setter :value
 
-    def initialize(name, desc, default : Bool? = nil, @multi : Bool = false, **kwargs)
+    def initialize(name, desc, default : Bool? = nil, **kwargs)
       booldefault = default.nil? ? false : default
       super(name, desc, booldefault, **kwargs)
       @value = nil
       @min_args = 0
       @max_args = 0
+      @counter = 0
     end
 
     def value
@@ -244,6 +256,7 @@ module Optimist
     def add_argument_value(_paramlist : Array(String), neg_given)
       @value = (self.name.to_s =~ /^no_/) ? neg_given : !neg_given
       @given = true
+      @counter += 1
     end
 
     def needs_an_argument
@@ -385,13 +398,14 @@ module Optimist
   end
 
   class StringFlagOpt < Option
-    @value : String?
+    alias StringFlagType = String | Bool | Nil
+    @value : StringFlagType
     @default : String?
     setter :value
     getter :default
 
-    def value : String?
-      return @default if @value.nil?
+    def value : StringFlagType
+      return @default || false if @value.nil?
       @value
     end
 
@@ -408,9 +422,17 @@ module Optimist
     def add_argument_value(paramlist : Array(String), neg_given)
       @given = true
       @value = case paramlist.size
-               when 0 then nil
-               when 1 then paramlist.first
-               else        raise ArgumentError.new("Too many params given")
+               when 0
+                 if neg_given
+                   # when --no-opt is given, force false
+                   false
+                 else
+                   @default || true
+                 end
+               when 1
+                 paramlist.first
+               else
+                 raise ArgumentError.new("Too many params given")
                end
     end
 
@@ -420,14 +442,7 @@ module Optimist
     end
   end
 
-  ###
-  ###
-  # ##  ### MULTI_OPT_TYPES :
-  # ##  ## The set of values that indicate a multiple-parameter option (i.e., that
-  # ##  ## takes multiple space-separated values on the commandline) when passed as
-  # ##  ## the +:type+ parameter of #opt.
-  ###
-  # ##  # Option class for handling multiple Integers
+  # Option class for handling multiple Integers
   class Int32ArrayOpt < Option
     def type_format
       "=<i+>"
@@ -465,8 +480,6 @@ module Optimist
       self
     end
   end
-
-  ###
 
   # Option class for handling multiple Floats
   class Float64ArrayOpt < Option

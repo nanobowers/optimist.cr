@@ -399,7 +399,7 @@ module Optimist
         # NOTE: No support for slurping multiple arguments after an option is given
         # like Ruby optimist.
         if params.empty? && curopt.needs_an_argument
-          raise CommandlineError.new("Must give an argument for '#{givenarg.arg}'")
+          raise CommandlineError.new("Must give an argument for '#{givenarg.arg}' of #{curopt.class}")
         elsif params.size > 0 && curopt.takes_an_argument
           # take one param
           unless params_for_arg.has_key?(ident)
@@ -577,7 +577,8 @@ module Optimist
     def die(arg, msg = nil, error_code = nil, stderr : IO = STDERR)
       msg, error_code = nil, msg if msg.is_a?(Int)
       if msg
-        stderr.puts "Error: argument --#{@specs[arg].long.long} #{msg}."
+        longarg = @specs[arg]?.try(&.long).try(&.long) || arg
+        stderr.puts "Error: argument --#{longarg} #{msg}."
       else
         stderr.puts "Error: #{arg}."
       end

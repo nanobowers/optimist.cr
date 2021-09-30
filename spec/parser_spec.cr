@@ -116,7 +116,21 @@ describe Optimist::Parser do
     end
   end
 
-  # # flags that take an argument error unless given one
+  # Allows stdlib type defaults
+  it "allows stdlib types as the cls:" do
+    parser.opt :aa, "desc", cls: Int32
+    parser.opt :bb, "desc", cls: String
+    parser.opt :cc, "desc", cls: Float64
+    parser.opt :dd, "desc", cls: Bool
+    opts = parser.parse(%w(--aa 9 --bb hello --dd --cc -9.12))
+    opts["aa"].value.should eq 9
+    opts["bb"].value.should eq "hello"
+    opts["cc"].value.should eq -9.12
+    opts["dd"].value.should eq true
+  end
+
+  
+  # flags that take an argument error unless given one
   it "tests_argflags_demand_args" do
     parser.opt :goodarg, "desc", cls: StringOpt
     parser.opt :goodarg2, "desc", cls: StringOpt
@@ -126,7 +140,7 @@ describe Optimist::Parser do
     expect_raises(CommandlineError) { parser.parse(%w(--goodarg)) }
   end
 
-  # # flags that don't take arguments ignore them
+  # flags that don't take arguments ignore them
   it "tests_arglessflags_refuse_args" do
     parser.opt :goodarg, ""
     parser.opt :goodarg2, ""
@@ -137,8 +151,8 @@ describe Optimist::Parser do
     parser.leftovers.should eq ["a"]
   end
 
-  # # flags that require args of a specific type refuse args of other
-  # # types
+  # flags that require args of a specific type refuse args of other
+  # types
   it "tests_typed_args_refuse_args_of_other_types" do
     parser.opt :goodarg, "desc", cls: Int32Opt
     # expect_raises(ArgumentError) { parser.opt :badarg, "desc", cls: :asdf }
@@ -148,7 +162,7 @@ describe Optimist::Parser do
     expect_raises(CommandlineError) { parser.parse(%w(--goodarg hello)) }
   end
 
-  # # type is correctly derived from :default
+  # type is correctly derived from :default
   it "tests_type_correctly_derived_from_default" do
     # single arg: int
     parser.opt :argsi, "desc", default: 0
@@ -223,20 +237,16 @@ describe Optimist::Parser do
     #    opts[:argmst].value.should eq ["goodbye"]
   end
 
-  # # cls: and default: must match if both are specified
-  it "tests_type_and_default_must_match" do
-    # Cannot test mismatch of cls: and default: here, because it is a compiler error.
-    # expect_raises(ArgumentError) { parser.opt :badarg, "desc", cls: Int32Opt, default: "hello" }
-    # expect_raises(ArgumentError) { parser.opt :badarg2, "desc", cls: StringOpt, default: 4 }
-    # expect_raises(ArgumentError) { parser.opt :badarg2, "desc", cls: StringOpt, default: "hi" }
-    # expect_raises(ArgumentError) { parser.opt :badarg2, "desc", cls: :ints, default: [3.14] }
+  # cls: and default: must match if both are specified
+  # Cannot test mismatch of cls: and default: in crystal because it is a compiler error.
 
+  it "creates an opt with matching cls: and default:" do
     parser.opt :argsi, "desc", cls: Int32Opt, default: 4
     parser.opt :argsf, "desc", cls: Float64Opt, default: 3.14
     parser.opt :argss, "desc", cls: StringOpt, default: "yo"
-    #    parser.opt :argmi, "desc", cls: :ints, default: [4]
-    #    parser.opt :argmf, "desc", cls: :floats, default: [3.14]
-    #    parser.opt :argmst, "desc", cls: :strings, default: ["yo"]
+    parser.opt :argmi, "desc", cls: Int32ArrayOpt, default: [4]
+    parser.opt :argmf, "desc", cls: Float64ArrayOpt, default: [3.14]
+    parser.opt :argmst, "desc", cls: StringArrayOpt, default: ["yo"]
   end
 
   ##
@@ -259,21 +269,16 @@ describe Optimist::Parser do
     end
   end
 
-  #  it "tests_type_and_empty_array" do
-  #    parser.opt :argmi, "desc", cls: :ints, default: [] of Int32
-  #    parser.opt :argmf, "desc", cls: :floats, default: [] of Float
-  #    parser.opt :argmd, "desc", cls: :dates, default: [] of Date
-  #    parser.opt :argms, "desc", cls: :strings, default: [] of String
-  #    expect_raises(ArgumentError) { parser.opt :badi, "desc", cls: :int, default: [] of Int }
-  #    expect_raises(ArgumentError) { parser.opt :badf, "desc", cls: :float, default: [] of Float }
-  #    expect_raises(ArgumentError) { parser.opt :badd, "desc", cls: :date, default: [] of Date }
-  #    expect_raises(ArgumentError) { parser.opt :bads, "desc", cls: :string, default: [] of String }
-  #    opts = parser.parse([] of String)
-  #    opts[:argmi].should be_empty
-  #    opts[:argmf].should be_empty
-  #    opts[:argmd].should be_empty
-  #    opts[:argms].should be_empty
-  #  end
+    it "tests ArrayOpts with empty array defaults" do
+      parser.opt :argmi, "desc", cls: Int32ArrayOpt, default: [] of Int32
+      parser.opt :argmf, "desc", cls: Float64ArrayOpt, default: [] of Float64
+      parser.opt :argms, "desc", cls: StringArrayOpt, default: [] of String
+      
+      opts = parser.parse([] of String)
+      opts["argmi"].value.should eq [] of Int32
+      opts["argmf"].value.should eq [] of Float64
+      opts["argms"].value.should eq [] of String
+    end
 
   it "tests_long_detects_bad_names" do
     parser.opt :goodarg, "desc", long: "none"
@@ -376,43 +381,43 @@ describe Optimist::Parser do
     end
   end
 
-  # # two args can't have the same name
-  it "tests_conflicting_names_are_detected" do
+  # two args can't have the same name
+  it "ensures conflicting names are detected" do
     parser.opt :goodarg
     expect_raises(ArgumentError) { parser.opt :goodarg }
   end
 
-  # # two args can't have the same :long
+  # two args can't have the same :long
   it "tests_conflicting_longs_detected" do
     parser.opt :goodarg, "desc", long: "--goodarg"
     expect_raises(ArgumentError) { parser.opt :badarg, "desc", long: "--goodarg" }
   end
 
-  # # two args can't have the same :short
+  # two args can't have the same :short
   it "tests_conflicting_shorts_detected" do
     parser.opt :goodarg, "desc", short: "-g"
     expect_raises(ArgumentError) { parser.opt :badarg, "desc", short: "-g" }
   end
 
-  # # note: this behavior has changed in optimist 2.0!
+  # note: this behavior has changed in optimist 2.0!
   it "tests_flag_parameters" do
     parser.opt :defaultnone, "desc"
     parser.opt :defaultfalse, "desc", default: false
     parser.opt :defaulttrue, "desc", default: true
 
-    # # default state
+    # default state
     opts = parser.parse([] of String)
     opts["defaultnone"].value.should eq false
     opts["defaultfalse"].value.should eq false
     opts["defaulttrue"].value.should eq true
 
-    # # specifying turns them on, regardless of default
+    # specifying turns them on, regardless of default
     opts = parser.parse %w(--defaultfalse --defaulttrue --defaultnone)
     opts["defaultnone"].value.should eq true
     opts["defaultfalse"].value.should eq true
     opts["defaulttrue"].value.should eq true
 
-    # # using --no- form turns them off, regardless of default
+    # using --no- form turns them off, regardless of default
     opts = parser.parse %w(--no-defaultfalse --no-defaulttrue --no-defaultnone)
     opts["defaultnone"].value.should eq false
     opts["defaultfalse"].value.should eq false
@@ -424,26 +429,26 @@ describe Optimist::Parser do
     parser.opt :no_default_false, "desc", default: false
     parser.opt :no_default_true, "desc", default: true
 
-    # # default state
+    # default state
     opts = parser.parse([] of String)
 
     opts["no_default_none"].value.should eq false
     opts["no_default_false"].value.should eq false
     opts["no_default_true"].value.should eq true
 
-    # # specifying turns them all on, regardless of default
+    # specifying turns them all on, regardless of default
     opts = parser.parse %w(--no-default-false --no-default-true --no-default-none)
     opts["no_default_none"].value.should eq true
     opts["no_default_false"].value.should eq true
     opts["no_default_true"].value.should eq true
 
-    # # using dropped-no form turns them all off, regardless of default
+    # using dropped-no form turns them all off, regardless of default
     opts = parser.parse %w(--default-false --default-true --default-none)
     opts["no_default_none"].value.should eq false
     opts["no_default_false"].value.should eq false
     opts["no_default_true"].value.should eq false
 
-    # # disallow double negatives for reasons of sanity preservation
+    # disallow double negatives for reasons of sanity preservation
     expect_raises(CommandlineError) { parser.parse %w(--no-no-default-true) }
   end
 
@@ -721,9 +726,9 @@ EOM
     opts["arg"].value.should eq "goat"
     opts = parser.parse %w(--arg=goat)
     opts["arg"].value.should eq "goat"
-    # # actually, this next one is valid. empty string for --arg, and goat as a
-    # # leftover.
-    # # expect_raises(CommandlineError) { opts = parser.parse %w(--arg= goat) }
+    # actually, this next one is valid. empty string for --arg, and goat as a
+    # leftover.
+    # expect_raises(CommandlineError) { opts = parser.parse %w(--arg= goat) }
   end
 
   describe "auto-generated long names" do
@@ -861,7 +866,7 @@ EOM
       opts["arg1"].value.should eq true
       opts["arg2"].value.should eq false
 
-      # # restart parsing
+      # restart parsing
       parser.leftovers.shift
       opts = parser.parse parser.leftovers
       opts["arg1"].value.should eq false
@@ -877,7 +882,7 @@ EOM
       opts["arg1"].value.should eq true
       opts["arg2"].value.should eq true
 
-      # # restart parsing
+      # restart parsing
       parser.leftovers.should be_empty
 
       # parser.leftovers.shift
@@ -895,13 +900,13 @@ EOM
       opts["arg1"].value.should eq false
       opts["arg2"].value.should eq false
 
-      # # restart parsing
+      # restart parsing
       parser.leftovers.shift
       opts = parser.parse parser.leftovers
       opts["arg1"].value.should eq false
       opts["arg2"].value.should eq false
 
-      # # restart parsing again
+      # restart parsing again
       parser.leftovers.shift
       opts = parser.parse parser.leftovers
       opts["arg1"].value.should eq true
@@ -1067,7 +1072,7 @@ EOM
     expect_raises(CommandlineError) do
       newp.parse %w(--book 5) # ambiguous
     end
-    # # partial match causes 'specified multiple times' error
+    # partial match causes 'specified multiple times' error
     expect_raises(CommandlineError, /specified multiple times/) do
       newp.parse %w(--bookc 17 --bookcost 22)
     end
@@ -1092,86 +1097,80 @@ EOM
     parser.leftovers.size.should eq 0
   end
 
-  #  it "tests_multi_args_default_to_empty_array" do
-  #    parser.opt :arg1, "arg", multi: true
-  #    opts = parser.parse([] of String)
-  #    opts["arg1"].value.should be_empty
-  #  end
-
-  pending "tests_simple_interface_handles_help" do
-    assert_stdout(/Options:/) do
-      expect_raises(SystemExit) do
-        ::Optimist.options(%w(-h)) do
-          opt :potato
-        end
+  describe "Simple-Interface" do
+  it "handles help" do
+    sio = IO::Memory.new
+    expect_raises(SystemExit) do
+      Optimist.options(%w(-h), stdout: sio) do
+        opt :potato
       end
     end
+    sio.to_s.should match /Options:/
 
     # ensure regular status is returned
-
-    assert_stdout do
-      begin
-        ::Optimist.options(%w(-h)) do
-          opt :potato
-        end
-      rescue e : SystemExit
-        e.status.should eq 0
+    ex = expect_raises(SystemExit) do
+      Optimist.options(%w(-h), stdout: sio) do
+        opt :potato
       end
     end
+    ex.error_code.should eq 0
+
   end
 
-  pending "tests_simple_interface_handles_version" do
-    assert_stdout(/1.2/) do
-      expect_raises(SystemExit) do
-        ::Optimist.options(%w(-v)) do
-          version "1.2"
-          opt :potato
-        end
+  it "produces a version" do
+    sio = IO::Memory.new
+    ex = expect_raises(SystemExit) do
+      Optimist.options(%w(-v), stdout: sio) do
+        version "1.2"
+        opt :potato
       end
     end
+    ex.error_code.should eq 0
+    sio.to_s.should match /1.2/mi
   end
 
-  it "tests_simple_interface_handles_regular_usage" do
-    opts = ::Optimist.options(%w(--potato)) do
+  it "handles regular usage" do
+    sio = IO::Memory.new
+    opts = Optimist.options(%w(--potato), stdout: sio) do
       opt :potato
     end
     opts["potato"].value.should eq true
   end
 
-  pending "tests_simple_interface_handles_die" do
-    assert_stderr do
-      ::Optimist.options(%w(--potato)) do
-        opt :potato
-      end
-      expect_raises(SystemExit) { ::Optimist.die :potato, "is invalid" }
+  it "handles die" do
+    sio = IO::Memory.new
+    opts = Optimist.options(%w(--potato)) do
+      opt :potato
     end
+    expect_raises(SystemExit) {
+      Optimist.die(:potato, "is invalid", stderr: sio)
+    }
+    sio.to_s.should match /Error:/
   end
 
-  pending "tests_simple_interface_handles_die_without_message" do
-    assert_stderr(/Error:/) do
-      ::Optimist.options(%w(--potato)) do
-        opt :potato
-      end
-      expect_raises(SystemExit) { ::Optimist.die :potato }
+  it "handles die without a message" do
+    sio = IO::Memory.new
+    Optimist.options(%w(--potato)) do
+      opt :potato
     end
+    expect_raises(SystemExit) {
+      Optimist.die :potato, stderr: sio
+    }
+    sio.to_s.should match /Error:/
   end
 
-  pending "tests_invalid_option_with_simple_interface" do
-    assert_stderr do
-      expect_raises(SystemExit) do
-        ::Optimist.options(%w(--potato))
-      end
+  it "fails with error code on an invalid option" do
+    sio = IO::Memory.new
+    expect_raises(SystemExit) do
+      Optimist.options(%w(--potato), stderr: sio) { }
     end
-
-    assert_stderr do
-      begin
-        ::Optimist.options(%w(--potato))
-      rescue e : SystemExit
-        e.status.should be(-1)
-      end
-    end
+    ex = expect_raises(SystemExit) {
+      Optimist.options(%w(--potato), stderr: sio) { }
+    }
+    ex.error_code.should eq -1
   end
-
+  end
+  
   describe "callback" do
     it "yields an option to a block" do
       parser.opt "cb1", cls: StringOpt do |o|

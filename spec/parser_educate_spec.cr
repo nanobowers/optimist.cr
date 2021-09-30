@@ -22,9 +22,9 @@ describe Optimist do
     end
 
     it "tests_no_arguments_to_stdout" do
-      # assert_stdout(/Options:/) do
-      parser.educate
-      # end
+      sio = IO::Memory.new
+      parser.educate sio
+      sio.to_s.should match /Options:/
     end
 
     it "tests_argument_to_stringio" do

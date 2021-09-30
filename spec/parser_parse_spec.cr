@@ -51,8 +51,8 @@ describe Optimist::Parser do
 
   pending "handles manual version flag setting" do
     parser.opt :version
-    parser.parse(%w(-v)).has_key?("version").should be true
-    parser.parse(%w(-v)).["version"].given?.should_be true
+    parser.parse(%w(-v)).has_key?("version").should eq true
+    parser.parse(%w(-v)).["version"].given?.should eq true
   end
 
   it "produces VersionError only if version is set" do
