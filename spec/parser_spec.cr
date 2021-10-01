@@ -934,28 +934,6 @@ EOM
     end
   end
 
-  pending "tests_unknown_subcommand" do
-    parser.opt :global_flag, "Global flag", short: "-g", cls: BoolOpt
-    parser.opt :global_param, "Global parameter", short: "-p", default: 5
-    parser.stop_on_unknown
-
-    expected_opts = {:global_flag => true, :help => false, :global_param => 5, :global_flag_given => true}
-    expected_leftovers = ["my_subcommand", "-c"]
-
-    assert_parses_correctly parser, %w(--global-flag my_subcommand -c),
-      expected_opts, expected_leftovers
-    assert_parses_correctly parser, %w(-g my_subcommand -c),
-      expected_opts, expected_leftovers
-
-    expected_opts = {:global_flag => false, :help => false, :global_param => 5, :global_param_given => true}
-    expected_leftovers = ["my_subcommand", "-c"]
-
-    assert_parses_correctly parser, %w(-p 5 my_subcommand -c),
-      expected_opts, expected_leftovers
-    assert_parses_correctly parser, %w(--global-param 5 my_subcommand -c),
-      expected_opts, expected_leftovers
-  end
-
   it "tests_alternate_args" do
     args = %w(-a -b -c)
 

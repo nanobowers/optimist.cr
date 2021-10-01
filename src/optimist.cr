@@ -1,5 +1,7 @@
 # TODO: Write documentation for `Optimist`
 require "edits"
+require "term-screen" # get width of terminal screen
+
 require "./optimist/errors"
 require "./optimist/types"
 require "./optimist/parser"

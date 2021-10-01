@@ -11,3 +11,5 @@ license: MIT
 dependencies:
   edits:
     github: tcrouch/edits.cr
+  term-screen:
+    github: crystal-term/screen

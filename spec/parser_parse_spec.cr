@@ -49,12 +49,6 @@ describe Optimist::Parser do
     expect_raises(VersionNeeded) { parser.parse %w(--version) }
   end
 
-  pending "handles manual version flag setting" do
-    parser.opt :version
-    parser.parse(%w(-v)).has_key?("version").should eq true
-    parser.parse(%w(-v)).["version"].given?.should eq true
-  end
-
   it "produces VersionError only if version is set" do
     parser.opt :arg, ""
     expect_raises(CommandlineError) { parser.parse %w(-v) }

@@ -1,6 +1,8 @@
 module Optimist
-  alias CbType = (Option -> Nil) | Nil
 
+  # alias CbType = (Option -> Nil) | Nil
+
+  # Abstract base class for all other Options.
   abstract class Option
     abstract def default
     abstract def add_argument_value(a : Array(String), b : Bool)
@@ -65,7 +67,7 @@ module Optimist
 
     getter :min_args, :max_args
 
-    # # TODO: push into SHORT
+    # TODO: push into SHORT
     def doesnt_need_autogen_short
       !short.auto || !short.chars.empty?
     end
@@ -93,7 +95,7 @@ module Optimist
       desc_str
     end
 
-    # # Format stdio like objects to a string
+    # Format stdio like objects to a string
     def format_stdio(obj)
       case obj
       when STDOUT then "<stdout>"
@@ -103,13 +105,13 @@ module Optimist
       end
     end
 
-    # # Format the educate-line description including the default-value(s)
+    # Format the educate-line description including the default-value(s)
     def description_with_default(str)
       return str unless default
       return "#{str} (Default: #{default.inspect})"
     end
 
-    # # Format the educate-line description including the permitted-value(s)
+    # Format the educate-line description including the permitted-value(s)
     def description_with_permitted(str)
       permitted_s = case permitted
                     in Array
@@ -126,21 +128,23 @@ module Optimist
       return "#{str} (Permitted: #{permitted_s})"
     end
 
-    # Format permitted string
-
-    def permitted_valid_string(permitted : Array) : String
+    # Format permitted string for Array
+    private def permitted_valid_string(permitted : Array) : String
       "one of: " + permitted.map(&.to_s).join(", ")
     end
 
-    def permitted_valid_string(permitted : Range) : String
+    # Format permitted string for Range
+    private def permitted_valid_string(permitted : Range) : String
       "value in range of: #{permitted}"
     end
 
-    def permitted_valid_string(permitted : Regex) : String
+    # Format permitted string for Regex
+    private def permitted_valid_string(permitted : Regex) : String
       "value matching: #{permitted.inspect}"
     end
 
-    def permitted_valid_string(permitted : Nil)
+    # Format permitted string for Nil
+    private def permitted_valid_string(permitted : Nil)
       "unpermitted"
     end
 
@@ -178,7 +182,7 @@ module Optimist
 
     # Factory class method
     # Determines which type of object to create based on arguments passed
-    # to +Optimist::opt+.  This is tricky because we allow the +default:+
+    # to `Optimist.opt`.  This is tricky because we allow the *default*
     # to be able to set the option's type.
     def self.create(name : String,
                     desc : String,
@@ -396,9 +400,13 @@ module Optimist
   end
 
   class StringFlagOpt < Option
+
+    # :nodoc: 
     alias StringFlagType = String | Bool | Nil
+    
     @value : StringFlagType
     @default : String?
+
     setter :value
     getter :default
 

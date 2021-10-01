@@ -3,149 +3,162 @@ require "./spec_helper"
 include Optimist
 
 describe Optimist do
-
   parser = Parser.new
   before_each do
     parser = Parser.new
   end
-  
-describe "Subcommand" do
 
-  # fails when no args provided
-  it "test_subcommand_noargs" do
-    expect_raises(Optimist::CommandlineError, /No subcommand provided/) do
-      parser.parse([] of String)
+  describe "Subcommand" do
+    pending "handles an unknown subcommand" do
+      parser.opt :global_flag, "Global flag", short: "-g", cls: BoolOpt
+      parser.opt :global_param, "Global parameter", short: "-p", default: 5
+      parser.stop_on_unknown
+
+      expected_opts = {:global_flag => true, :help => false, :global_param => 5, :global_flag_given => true}
+      expected_leftovers = ["my_subcommand", "-c"]
+
+      assert_parses_correctly parser, %w(--global-flag my_subcommand -c),
+        expected_opts, expected_leftovers
+      assert_parses_correctly parser, %w(-g my_subcommand -c),
+        expected_opts, expected_leftovers
+
+      expected_opts = {:global_flag => false, :help => false, :global_param => 5, :global_param_given => true}
+      expected_leftovers = ["my_subcommand", "-c"]
+
+      assert_parses_correctly parser, %w(-p 5 my_subcommand -c),
+        expected_opts, expected_leftovers
+      assert_parses_correctly parser, %w(--global-param 5 my_subcommand -c),
+        expected_opts, expected_leftovers
+    end
+
+    # fails when no args provided
+    it "handles a subcommand with no args" do
+      expect_raises(Optimist::CommandlineError, /No subcommand provided/) do
+        parser.parse([] of String)
+      end
+    end
+
+    # ok when global help provided
+    it "provides global help" do
+      expect_raises(Optimist::HelpNeeded) do
+        parser.parse(%w(-h))
+      end
+      sio = IO::Memory.new
+      parser.educate sio
+      sio.to_s.should match(/list\s+show the list/)
+      sio.to_s.should match(/create\s*\n/)
+    end
+
+    # fails when invalid param given
+    it "fails with an invalid opt" do
+      expect_raises(Optimist::CommandlineError, /unknown argument '--boom'/) do
+        parser.parse(%w(--boom))
+      end
+    end
+
+    # fails when invalid subcommand given
+    it "fails with an invalid subcmd" do
+      expect_raises(Optimist::CommandlineError, /unknown subcommand 'boom'/) do
+        parser.parse(%w(boom))
+      end
+    end
+
+    # ok when valid subcommand given
+    it "can parse a valid subcommand with no opts" do
+      parser.parse(%w(list))
+      parser.parse(%w(create))
+    end
+
+    # ok when valid subcommand given with help param
+    it "test_subcommand_help_subcmd1" do
+      err = expect_raises(Optimist::HelpNeeded) do
+        parser.parse(%w(list --help))
+      end
+
+      sio = IO::Memory.new
+      err.parser.educate sio
+      sio.to_s.should match(/all.*list all the things/)
+      sio.to_s.should match(/help.*Show this message/)
+    end
+
+    it "test_subcommand_help_subcmd2" do
+      err = expect_raises(Optimist::HelpNeeded) do
+        parser.parse(%w(create --help))
+      end
+      sio = IO::Memory.new
+      err.parser.educate sio
+      sio.to_s.should match(/partial.*create a partial thing/)
+      sio.to_s.should match(/name.*creation name/)
+      sio.to_s.should match(/help.*Show this message/)
+    end
+
+    it "fails when a valid subcmd is given with an invalid param" do
+      expect_raises(Optimist::CommandlineError, /unknown argument '--foo' for command 'list'/) do
+        parser.parse(%w(list --foo))
+      end
+      expect_raises(Optimist::CommandlineError, /unknown argument '--bar' for command 'create'/) do
+        parser.parse(%w(create --bar))
+      end
+    end
+
+    it "is ok when valid subcommand given with valid params" do
+      parser.parse(%w(list --all))
+      parser.parse(%w(create --partial --name duck))
     end
   end
 
-  # ok when global help provided
-  it "test_subcommand_global_help" do
-    expect_raises(Optimist::HelpNeeded) do
-      parser.parse(%w(-h))
-    end
-    sio = IO::Memory.new
-    parser.educate sio
-    sio.to_s.should match(/list\s+show the list/)
-    sio.to_s.should match(/create\s*\n/)
-  end
+  describe "SubcommandsWithGlobalOptTest" do
+    # include SubcommandTests
 
-  # fails when invalid param given
-  it "test_subcommand_invalid_opt" do
-    expect_raises(Optimist::CommandlineError, /unknown argument '--boom'/) do
-      parser.parse(%w(--boom))
-    end
-  end
-  
-  # fails when invalid subcommand given
-  it "test_subcommand_invalid_subcmd" do
-    expect_raises(Optimist::CommandlineError, /unknown subcommand 'boom'/) do
-      parser.parse(%w(boom))
-    end
-  end
-  
-  # ok when valid subcommand given
-  it "test_subcommand_ok_noopts" do
-    parser.parse(%w(list))
-    parser.parse(%w(create))
-  end
-
-  # ok when valid subcommand given with help param
-  it "test_subcommand_help_subcmd1" do
-    err = expect_raises(Optimist::HelpNeeded) do
-      parser.parse(%w(list --help))
+    Spec.before_each do
+      parser = Parser.new
+      parser.opt :some_global_stropt, "Some global string option", type: :string, short: :none
+      parser.opt :some_global_flag, "Some global flag"
+      parser.subcmd :list, "show the list" do
+        opt :all, "list all the things", type: :boolean
+      end
+      parser.subcmd "create" do
+        opt :partial, "create a partial thing", type: :boolean
+        opt :name, "creation name", type: :string
+      end
     end
 
-    sio = IO::Memory.new
-    err.parser.educate sio
-    sio.to_s.should match(/all.*list all the things/)
-    sio.to_s.should match(/help.*Show this message/)
-  end
-  
-  it "test_subcommand_help_subcmd2" do
-    err = expect_raises(Optimist::HelpNeeded) do
-      parser.parse(%w(create --help))
+    it "test_subcommand_ok_gopts" do
+      parser.parse(%w(--some-global-flag list --all))
+      parser.parse(%w(--some-global-stropt GHI create --partial --name duck))
+      # handles minimal-length partial-long arguments
+      parser.parse(%w(--some-global-s GHI create --par --na duck))
     end
-    sio = IO::Memory.new
-    err.parser.educate sio
-    sio.to_s.should match(/partial.*create a partial thing/)
-    sio.to_s.should match(/name.*creation name/)
-    sio.to_s.should match(/help.*Show this message/)
-  end
-  
-  # fails when valid subcommand given with invalid param
-  it "test_subcommand_invalid_subopt" do
-    expect_raises(Optimist::CommandlineError, /unknown argument '--foo' for command 'list'/) do
-      parser.parse(%w(list --foo))
-    end
-    expect_raises(Optimist::CommandlineError, /unknown argument '--bar' for command 'create'/) do
-      parser.parse(%w(create --bar))
-    end
-  end
 
-  # ok when valid subcommand given with valid params
-  it "test_subcommand_ok" do
-    parser.parse(%w(list --all))
-    parser.parse(%w(create --partial --name duck))
-  end
-
-  
-end
-
-describe "SubcommandsWithGlobalOptTest" do
-
-# include SubcommandTests
-
-  Spec.before_each do
-    parser = Parser.new
-    parser.opt :some_global_stropt, "Some global string option", type: :string, short: :none
-    parser.opt :some_global_flag, "Some global flag"
-    parser.subcmd :list, "show the list" do
-      opt :all, "list all the things", type: :boolean
-    end
-    parser.subcmd "create" do
-      opt :partial, "create a partial thing", type: :boolean
-      opt :name,    "creation name", type: :string
-    end
-  end
-
-  it "test_subcommand_ok_gopts" do
-    parser.parse(%w(--some-global-flag list --all))
-    parser.parse(%w(--some-global-stropt GHI create --partial --name duck))
-    # handles minimal-length partial-long arguments
-    parser.parse(%w(--some-global-s GHI create --par --na duck))
-  end
-  
-  it "test_subcommand_invalid_gopts" do
-    expect_raises_errmatch(Optimist::CommandlineError, /unknown argument '--all'/) do
-      parser.parse(%w(--all list --all))
-    end
-    # handles misspellings property on subcommands
-    err_regex = /unknown argument '--partul' for command 'create'.  Did you mean: \[--partial\]/
+    it "test_subcommand_invalid_gopts" do
+      expect_raises_errmatch(Optimist::CommandlineError, /unknown argument '--all'/) do
+        parser.parse(%w(--all list --all))
+      end
+      # handles misspellings property on subcommands
+      err_regex = /unknown argument '--partul' for command 'create'.  Did you mean: \[--partial\]/
       expect_raises_errmatch(Optimist::CommandlineError, err_regex) do
         parser.parse(%w(--some-global-stropt GHI create --partul --name duck))
       end
-  end
-
-end
-
-describe "SubcommandsWithoutGlobalOpt" do
-  # include SubcommandTests
-  Spec.before_each do
-    parser = Parser.new
-    parser.subcmd :list, "show the list" do
-      opt :all, "list all the things", type: :boolean
-    end
-    parser.subcmd "create" do
-      opt :partial, "create a partial thing", type: :boolean
-      opt :name,    "creation name", type: :string
     end
   end
 
-  it "test_subcommand_invalid_gopts" do
-    expect_raises(Optimist::CommandlineError, /unknown argument '--some-global-flag'/) do
-      parser.parse(%w(--some-global-flag list --all))
+  describe "SubcommandsWithoutGlobalOpt" do
+    # include SubcommandTests
+    Spec.before_each do
+      parser = Parser.new
+      parser.subcmd :list, "show the list" do
+        opt :all, "list all the things", type: :boolean
+      end
+      parser.subcmd "create" do
+        opt :partial, "create a partial thing", type: :boolean
+        opt :name, "creation name", type: :string
+      end
+    end
+
+    it "test_subcommand_invalid_gopts" do
+      expect_raises(Optimist::CommandlineError, /unknown argument '--some-global-flag'/) do
+        parser.parse(%w(--some-global-flag list --all))
+      end
     end
   end
-end
-
 end
