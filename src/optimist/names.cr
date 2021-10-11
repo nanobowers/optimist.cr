@@ -57,19 +57,33 @@ module Optimist
       self.add(value)
     end
 
-    # Overload for char/string
-    def add(value : SingleShortNameType)
-      sopt = case (strval = value.to_s)
-             when /^-(.)$/ then $1
-             when /^.$/    then strval
-             else               raise ArgumentError.new("invalid short option name '#{value.inspect}'")
-             end
-
-      if sopt =~ INVALID_ARG_REGEX
-        raise ArgumentError.new("short option name '#{sopt}' can't be a number or a dash")
-      end
-      @chars << sopt
+    # Add a single character option
+    def add(value : Char)
+      raise ArgumentError.new("short option name '#{value}' must be an alphanumeric character") unless value.ascii_alphanumeric?
+      @chars << value.to_s
     end
+
+    # Overload for String
+    def add(value : String)
+      valsize = value.size
+      return self.add(value.char_at(0)) if valsize == 1
+      return self.add(value.char_at(1)) if valsize == 2 && value[0] == '-'
+      raise ArgumentError.new("invalid short option name #{value.inspect}, must be in the form of 'x' or '-x'")
+    end
+    
+    #SingleShortNameType)
+    #  sopt if value.is_a?(String)
+    #    
+    #  sopt = case (strval = value.to_s)
+    #         when /^-(.)$/ then $1
+    #         when /^.$/    then strval
+    #         else               raise 
+    #         end
+    ##if sopt =~ INVALID_ARG_REGEX
+    #  #  raise ArgumentError.new("short option name '#{sopt}' can't be a number or a dash")
+    #  #end
+    #  @chars << sopt
+    #end
 
     # Overload for true/false values
     def add(value : Bool?)

@@ -581,8 +581,8 @@ EOM
     expect_raises(CommandlineError, /Must give an argument/) { parser.parse %w(-f) }
   end
 
-  it "tests_short_options_cant_be_numeric" do
-    expect_raises(ArgumentError) { parser.opt :arg, "desc", short: "-1" }
+  it "allows numeric short options" do
+    parser.opt :arg, "desc", short: "-1"
     parser.opt :a1b, "desc"
     parser.opt :a2b, "desc"
     parser.parse([] of String)
@@ -592,10 +592,11 @@ EOM
     parser.specs["a2b"].short.chars.first.should eq "b"
   end
 
-  it "tests_short_options_can_be_weird" do
-    parser.opt :arg1, "desc", short: "#"
-    parser.opt :arg2, "desc", short: "."
-    expect_raises(ArgumentError) { parser.opt :arg3, "desc", short: "-" }
+  it "disallows non ascii-alphanumeric short-options" do
+    msgrx = /must be an alphanumeric/
+    expect_raises(ArgumentError, msgrx ) { parser.opt :arg1, "desc", short: "#" }
+    expect_raises(ArgumentError, msgrx) { parser.opt :arg2, "desc", short: "." }
+    expect_raises(ArgumentError, msgrx) { parser.opt :arg3, "desc", short: "-" }
   end
 
   it "tests_options_cant_be_set_multiple_times_if_not_specified" do
