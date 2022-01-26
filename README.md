@@ -143,7 +143,7 @@ AFAICT this was not possible with the original Optimist.  This can be set using 
    ```yaml
    dependencies:
      optimist:
-       github: nanobowers/optimist
+       github: nanobowers/optimist.cr
    ```
 
 2. Run `shards install`
